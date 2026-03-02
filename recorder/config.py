@@ -16,6 +16,11 @@ RECORDINGS_DIR_NAME = "recordings"
 RECORDINGS_DIR = PROJECT_ROOT / RECORDINGS_DIR_NAME
 WEBCAM_SUBDIR = "webcam"
 SCREEN_SUBDIR = "screen"
+AUDIO_SUBDIR = "audio"
+
+# Separate folder for test runs (python -m tests screen/webcam/audio)
+RECORDINGS_TEST_DIR_NAME = "recordings_test"
+RECORDINGS_TEST_DIR = PROJECT_ROOT / RECORDINGS_TEST_DIR_NAME
 
 
 def get_recordings_dir() -> Path:
@@ -33,11 +38,47 @@ def get_screen_dir() -> Path:
     return RECORDINGS_DIR / SCREEN_SUBDIR
 
 
+def get_audio_dir() -> Path:
+    """Directory for audio recordings (system/loopback)."""
+    return RECORDINGS_DIR / AUDIO_SUBDIR
+
+
+def get_test_recordings_dir() -> Path:
+    """Base directory for test recordings (tests module only)."""
+    return RECORDINGS_TEST_DIR
+
+
+def get_test_webcam_dir() -> Path:
+    """Test webcam recordings."""
+    return RECORDINGS_TEST_DIR / WEBCAM_SUBDIR
+
+
+def get_test_screen_dir() -> Path:
+    """Test screen recordings."""
+    return RECORDINGS_TEST_DIR / SCREEN_SUBDIR
+
+
+def get_test_audio_dir() -> Path:
+    """Test audio recordings."""
+    return RECORDINGS_TEST_DIR / AUDIO_SUBDIR
+
+
+def ensure_test_recordings_dirs() -> None:
+    """Create test recordings base and subfolders."""
+    RECORDINGS_TEST_DIR.mkdir(parents=True, exist_ok=True)
+    (RECORDINGS_TEST_DIR / WEBCAM_SUBDIR).mkdir(parents=True, exist_ok=True)
+    (RECORDINGS_TEST_DIR / SCREEN_SUBDIR).mkdir(parents=True, exist_ok=True)
+    (RECORDINGS_TEST_DIR / AUDIO_SUBDIR).mkdir(parents=True, exist_ok=True)
+
+
 def ensure_recordings_dirs() -> None:
     """Create recordings base and subfolders if they don't exist."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
-    (RECORDINGS_DIR / WEBCAM_SUBDIR).mkdir(parents=True, exist_ok=True)
-    (RECORDINGS_DIR / SCREEN_SUBDIR).mkdir(parents=True, exist_ok=True)
+    (RECORDINGS_DIR / ".gitkeep").touch(exist_ok=True)
+    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR):
+        subdir = RECORDINGS_DIR / sub
+        subdir.mkdir(parents=True, exist_ok=True)
+        (subdir / ".gitkeep").touch(exist_ok=True)
 
 
 # ─── UI / theme ─────────────────────────────────────────────────────────────
@@ -62,8 +103,13 @@ def sans_font():
 # ─── Recording ────────────────────────────────────────────────────────────────
 PREVIEW_W = 400
 PREVIEW_H = 225
-FPS = 20.0
+FPS = 25
 VIDEO_EXT = ".mp4"
+# Webcam uses the camera's native resolution (often 640x480 or 720p). Screen uses full monitor
+# resolution (e.g. 1920x1080), so screen recordings are usually larger. Set both below to force
+# the same output size for webcam and screen (frames are resized when writing).
+RECORDING_WIDTH = None   # e.g. 1920 to match screen; None = use source size
+RECORDING_HEIGHT = None  # e.g. 1080; None = use source size
 # Default device indices: 0 = first/default camera, 1 = first/primary monitor (mss: 0=all, 1=primary)
 CAMERA_INDEX = 0
 MONITOR_INDEX = 1
@@ -72,6 +118,11 @@ VIDEO_FOURCC_TRY_ORDER = ("mp4v",)
 COUNTDOWN_SECONDS = 5
 # Max screen frames to write per loop when catching up (avoids death spiral; more = smoother but heavier)
 SCREEN_CATCHUP_FRAMES = 20
+
+# Audio (internal / system loopback)
+AUDIO_SAMPLE_RATE = 44100
+AUDIO_CHUNK_SIZE = 1024
+AUDIO_EXT = ".wav"
 
 # Float button: position (top-right, a bit below top so browser close button stays reachable)
 FLOAT_TOP_OFFSET = 56

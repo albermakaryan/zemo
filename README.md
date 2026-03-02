@@ -5,31 +5,41 @@ Desktop app to record screen and/or webcam as MP4, with a floating start/stop bu
 ## Features
 
 - **Screen** and **webcam** recording (separate or both at once, synced)
-- **Audio**: screen recording captures **system/computer audio** (what you hear); webcam recording captures **microphone**
-- **MP4** output (video + AAC audio when FFmpeg is available)
+- **System audio (Windows only)** via WASAPI loopback + PyAudioWPatch (what you hear from the speakers)
+- **MP4** video output for webcam and screen
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
-- **Recordings** saved under `recordings/webcam/` and `recordings/screen/`
+- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, and `recordings/audio/`
 
 ## Requirements
 
-- Python 3.7+
-- Windows (tested); macOS/Linux may work with small adjustments
-- **FFmpeg** on PATH for audio (download from [ffmpeg.org](https://ffmpeg.org/) or `winget install ffmpeg`). Without FFmpeg, videos are saved without sound.
+- Python 3.12+ (see `pyproject.toml`)
+- **Windows 10+ or Linux** for screen + webcam recording
+- **Windows only** for system audio recording (WASAPI loopback via PyAudioWPatch)
 
 ## Setup (once per machine)
 
-1. Install Python from [python.org](https://www.python.org/downloads/) and ensure **Add Python to PATH** is checked.
-2. In the project folder:
+1. Install Python from [python.org](https://www.python.org/downloads/) and ensure **Add Python to PATH** is checked (on Windows).
+2. In the project folder, install dependencies:
+
+   **Option A – simple (uses `requirements.txt`):**
    ```bash
    pip install -r requirements.txt
    ```
 
+   **Option B – editable install with extras:**
+   ```bash
+   pip install -e .
+   # Windows only (dxcam + system audio via PyAudioWPatch):
+   pip install -e ".[windows]"
+   ```
+
 ## Run
 
-- **Windows:** double-click `run_recorder.bat`
-- **Command line:** `python main.py`
-- **Standalone .exe:** double-click `dist\Recorder.exe` after building (see below)
+- **Windows (GUI):** double-click `run_recorder.bat`
+- **Linux/macOS (shell):** run `./run_recorder.sh` or `bash run_recorder.sh`
+- **Any OS (CLI):** `python main.py`
+- **Standalone .exe (Windows):** double-click `dist\Recorder.exe` after building (see below)
 
 If Python is missing, the batch file opens the Python download page.
 
@@ -39,30 +49,33 @@ If Python is missing, the batch file opens the Python download page.
 2. Double-click **`build_exe.bat`** (or in a terminal: `pyinstaller --clean Recorder.spec`)
 3. The executable is created at **`dist\Recorder.exe`**
 
-Copy `Recorder.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/` and `screen/` inside) for saving videos. No Python installation needed on that machine.
+Copy `Recorder.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, and `audio/` inside) for saving videos. No Python installation needed on that machine.
 
 ## Project layout
 
-```
-em_det/
+```text
+zemo/
 ├── main.py              # Entry point (dependency check + launch)
-├── record.py            # Legacy entry (calls main.py)
 ├── run_recorder.bat     # Windows launcher
+├── run_recorder.sh      # Linux/macOS launcher
 ├── requirements.txt
+├── pyproject.toml
 ├── recorder/            # Package
 │   ├── __init__.py
 │   ├── config.py        # Paths, constants, theme
-│   ├── recorders.py     # WebcamRecorder, ScreenRecorder
-│   └── ui.py            # App, RecorderPanel, FloatButtonWindow
+│   ├── ui/              # App, panels, float button
+│   ├── audio/           # Internal (system) audio recorder (Windows only)
+│   └── screen_recorder.py, webcam_recorder.py, ...
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
-    └── screen/          # Screen MP4s
+    ├── screen/          # Screen MP4s
+    └── audio/           # System audio WAVs (Windows only)
 ```
 
 ## Configuration
 
 - **Countdown length:** edit `COUNTDOWN_SECONDS` in `recorder/config.py`.
-- **Save location:** use the folder button (📁) in the app to choose a base folder; it will contain `webcam/` and `screen/` subfolders.
+- **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, and `audio/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
 
 ## License
 

@@ -1,7 +1,13 @@
 """
 Screen & Webcam Recorder – entry point.
-Run: pip install -r requirements.txt (once per machine).
-Start: double-click run_recorder.bat (Windows) or: python main.py
+
+Install (once per machine):
+  pip install -e .          # core (Windows + Linux)
+  pip install -e ".[windows]"  # optional: dxcam + system audio (Windows only)
+
+Start:
+  Windows: run_recorder.bat  or  python main.py
+  Linux/macOS: ./run_recorder.sh  or  python main.py
 """
 
 import sys
@@ -52,8 +58,16 @@ def main():
     from recorder.ui import App
     app = App()
     app.protocol("WM_DELETE_WINDOW", app.on_close)
-    app.mainloop()
+    try:
+        app.mainloop()
+    except KeyboardInterrupt:
+        if app.winfo_exists():
+            app.on_close()
+        sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)

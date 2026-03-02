@@ -1,0 +1,23 @@
+[project]
+name = "zemo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "opencv-python>=4.5.0",
+    "numpy>=1.19.0",
+    "mss>=6.0.0",
+    "Pillow>=8.0.0",
+    "imageio-ffmpeg>=0.4.9",
+    "pyautogui==0.9.54",
+    "keyboard==0.13.5",
+]
+
+[project.optional-dependencies]
+# Windows-only: faster screen capture (dxcam) and system audio (WASAPI).
+# On Linux/macOS the app uses mss for screen and does not offer system audio.
+windows = [
+    "dxcam-cpp==0.2.5",
+    "PyAudioWPatch>=0.2.12.0",
+]

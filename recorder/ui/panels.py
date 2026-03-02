@@ -115,17 +115,41 @@ class RecorderPanel(tk.Frame):
         else:
             self._start_recording()
 
-    def _start_recording(self, start_barrier=None, email=None):
-        email = email if email is not None else self._app.get_recording_email()
-        if not email:
+    def _start_preview(self):
+        """Start recorder in preview-only mode (no file). Used at app start when email is submitted."""
+        if self.recorder is not None:
             return
-        save_dir = self._effective_save_dir()
         self.recorder = self.recorder_cls(
             on_frame=self._on_frame,
             on_status=self._on_status,
             on_done=self._on_done,
         )
-        self.recorder.start(str(save_dir), start_barrier=start_barrier, email=email)
+        if hasattr(self.recorder, "start_preview"):
+            self.recorder.start_preview()
+        # else e.g. ScreenRecorder: no preview yet, recorder stays created but idle until _start_recording
+
+    def _start_recording(self, start_barrier=None, email=None):
+        email = email if email is not None else self._app.get_recording_email()
+        if not email:
+            return
+        save_dir = str(self._effective_save_dir())
+        # If already running in preview, switch to recording
+        if (
+            self.recorder is not None
+            and hasattr(self.recorder, "begin_recording")
+            and getattr(self.recorder, "_thread", None) is not None
+            and self.recorder._thread.is_alive()
+            and not self.recorder.recording
+        ):
+            self.recorder.begin_recording(save_dir, start_barrier=start_barrier, email=email)
+        else:
+            if self.recorder is None:
+                self.recorder = self.recorder_cls(
+                    on_frame=self._on_frame,
+                    on_status=self._on_status,
+                    on_done=self._on_done,
+                )
+            self.recorder.start(save_dir, start_barrier=start_barrier, email=email)
         self._btn_record.config(text="⏹  Stop", bg=config.BG3, fg=config.RED, activebackground=config.BG3)
         self._btn_open.config(state="disabled")
 

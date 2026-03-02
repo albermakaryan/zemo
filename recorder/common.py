@@ -38,6 +38,16 @@ def sanitize_email_for_filename(email: str) -> str:
     return s or "user"
 
 
+def email_filename_part(email: str) -> str:
+    """Email as filename part, keeping @ and . (e.g. alber.makaryan@ysu.am). Replaces only invalid chars."""
+    if not email or not isinstance(email, str):
+        return "user"
+    s = email.strip()
+    for c in '\\/:*?"<>|':
+        s = s.replace(c, "_")
+    return s or "user"
+
+
 def fmt_time(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     return f"{m:02d}:{s:02d}"

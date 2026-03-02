@@ -1,4 +1,30 @@
 env/
-recordings/
+recordings/*
+!recordings/.gitkeep
+!recordings/webcam/.gitkeep
+!recordings/screen/.gitkeep
+!recordings/audio/.gitkeep
 __pycache__/
 *.pyc
+./drafts/*
+./recordings_test/*
+./dist/*
+build/*
+
+# Editor / OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Other virtualenv names
+.venv/
+venv/
+

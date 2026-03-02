@@ -110,8 +110,13 @@ class FloatButtonWindow(tk.Toplevel):
             self._app._stop_both()
             self._update_ui()
         elif not self._is_counting_down():
+            # Email only when user clicks small button to start recording
             if not self._app.get_recording_email():
                 return
+            # Minimize preview window so only the small start/stop button is visible
+            self._app.iconify()
+            self.lift()
+            self.attributes("-topmost", True)
             self._start_countdown()
 
     def _start_countdown(self):

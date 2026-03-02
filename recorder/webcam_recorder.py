@@ -12,10 +12,9 @@ import cv2
 from recorder import config
 from recorder.common import (
     create_writer,
+    email_filename_part,
     make_even,
     resize_frame,
-    sanitize_email_for_filename,
-    timestamp,
 )
 
 
@@ -29,16 +28,36 @@ class WebcamRecorder:
         self._thread = None
         self.recording = False
         self.filename = ""
+        self._pending_recording = None  # (save_dir, barrier, email) when user clicks Record
+
+    def start_preview(self):
+        """Start capture thread in preview-only mode (no file). Call begin_recording() later to start writing."""
+        self._stop.clear()
+        self._pending_recording = None
+        self._thread = threading.Thread(target=self._run, args=(True,), daemon=True)
+        self._thread.start()
+
+    def begin_recording(self, save_dir, start_barrier=None, email=None):
+        """Switch from preview to recording (called after countdown)."""
+        save_path = Path(save_dir)
+        save_path.mkdir(parents=True, exist_ok=True)
+        (save_path / ".gitkeep").touch(exist_ok=True)
+        name_part = email_filename_part(email) if email else "user"
+        self.filename = str(save_path / f"{name_part}_webcam{config.VIDEO_EXT}")
+        self.recording = True
+        self._pending_recording = (str(save_dir), start_barrier, email)
 
     def start(self, save_dir, start_barrier=None, email=None):
+        """Start directly in recording mode (legacy)."""
         self._stop.clear()
-        self._start_barrier = start_barrier
+        self._pending_recording = None
         self.recording = True
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
-        prefix = f"{sanitize_email_for_filename(email)}_" if email else ""
-        self.filename = str(save_path / f"{prefix}webcam_{timestamp()}{config.VIDEO_EXT}")
-        self._thread = threading.Thread(target=self._run, args=(save_dir,), daemon=True)
+        (save_path / ".gitkeep").touch(exist_ok=True)
+        name_part = email_filename_part(email) if email else "user"
+        self.filename = str(save_path / f"{name_part}_webcam{config.VIDEO_EXT}")
+        self._thread = threading.Thread(target=self._run, args=(False, save_dir, start_barrier, email), daemon=True)
         self._thread.start()
 
     def stop(self, stop_time=None):
@@ -52,7 +71,7 @@ class WebcamRecorder:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
 
-    def _run(self, save_dir):
+    def _run(self, preview_only, save_dir=None, start_barrier=None, email=None):
         if sys.platform == "win32" and hasattr(cv2, "CAP_MSMF"):
             cap = cv2.VideoCapture(config.CAMERA_INDEX, cv2.CAP_MSMF)
         else:
@@ -63,61 +82,95 @@ class WebcamRecorder:
             cap = cv2.VideoCapture(config.CAMERA_INDEX)
         if not cap.isOpened():
             self.on_status("error", "Cannot open webcam")
-            self.recording = False
             return
 
-        w = make_even(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
-        h = make_even(int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        src_w = make_even(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
+        src_h = make_even(int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        if config.RECORDING_WIDTH is not None and config.RECORDING_HEIGHT is not None:
+            w, h = make_even(config.RECORDING_WIDTH), make_even(config.RECORDING_HEIGHT)
+        else:
+            w, h = src_w, src_h
+
         out = None
-        for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-            out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
-            if ok:
-                break
-            if out:
-                out.release()
-                out = None
-        if not out or not out.isOpened():
-            self.on_status("error", "Failed to create MP4 writer")
-            cap.release()
-            self.recording = False
-            return
-        self.on_status("recording", f"→ {Path(self.filename).name}")
-        if getattr(self, "_start_barrier", None) is not None:
-            self._start_barrier.wait()
         t0 = time.time()
         frame_count = 0
         frame = None
-        try:
-            next_write_time = t0
-            ret = True
-            while not self._stop.is_set():
-                t_now = time.time()
-                while next_write_time <= t_now:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    if (frame.shape[1], frame.shape[0]) != (w, h):
-                        frame = cv2.resize(frame, (w, h))
-                    out.write(frame)
-                    frame_count += 1
-                    next_write_time += 1.0 / config.FPS
-                    preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
-                    self.on_frame(preview, time.time() - t0)
-                if not ret:
+        next_write_time = t0
+        frame_interval = 1.0 / config.FPS
+
+        if not preview_only and save_dir:
+            for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
+                out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
+                if ok:
                     break
-                sleep_until = next_write_time - time.time()
-                if sleep_until > 0.002:
-                    time.sleep(sleep_until)
+                if out:
+                    out.release()
+                    out = None
+            if not out or not out.isOpened():
+                self.on_status("error", "Failed to create MP4 writer")
+                cap.release()
+                return
+            self.on_status("recording", f"→ {Path(self.filename).name}")
+            if start_barrier is not None:
+                start_barrier.wait()
+            t0 = time.time()
+            next_write_time = t0
+
+        try:
+            while not self._stop.is_set():
+                # If preview mode and pending recording, create writer and sync
+                if preview_only and self._pending_recording is not None:
+                    save_dir, barrier, email = self._pending_recording
+                    self._pending_recording = None
+                    for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
+                        out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
+                        if ok:
+                            break
+                        if out:
+                            out.release()
+                            out = None
+                    if not out or not out.isOpened():
+                        self.on_status("error", "Failed to create MP4 writer")
+                        break
+                    self.on_status("recording", f"→ {Path(self.filename).name}")
+                    if barrier is not None:
+                        barrier.wait()
+                    t0 = time.time()
+                    frame_count = 0
+                    next_write_time = t0
+                    preview_only = False
+
+                if not preview_only and out is None:
+                    break
+
+                ret, frame = cap.read()
+                if not ret:
+                    time.sleep(0.01)
+                    continue
+                if (frame.shape[1], frame.shape[0]) != (w, h):
+                    frame = cv2.resize(frame, (w, h))
+                elapsed = time.time() - t0 if out else 0
+                if out is not None:
+                    t_now = time.time()
+                    if next_write_time <= t_now:
+                        out.write(frame)
+                        frame_count += 1
+                        next_write_time += frame_interval
+                    sleep_until = next_write_time - time.time()
+                    if sleep_until > 0.002:
+                        time.sleep(sleep_until)
+                preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
+                self.on_frame(preview, elapsed)
         finally:
-            # Pad by real elapsed time (t0..t_final), not synthetic next_write_time, so no drift
-            t_final = getattr(self, "_stop_time", None) or time.time()
-            elapsed = t_final - t0
-            expected_frames = int(elapsed * config.FPS)
-            frames_missing = expected_frames - frame_count
-            if frame is not None and frames_missing > 0:
-                for _ in range(frames_missing):
-                    out.write(frame)
+            if out is not None:
+                t_final = getattr(self, "_stop_time", None) or time.time()
+                elapsed = t_final - t0
+                expected_frames = int(elapsed * config.FPS)
+                frames_missing = expected_frames - frame_count
+                if frame is not None and frames_missing > 0:
+                    for _ in range(frames_missing):
+                        out.write(frame)
+                out.release()
+                self.on_done(self.filename)
             cap.release()
-            out.release()
             self.recording = False
-            self.on_done(self.filename)

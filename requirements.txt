@@ -4,3 +4,10 @@ numpy>=1.19.0
 mss>=6.0.0
 Pillow>=8.0.0
 dxcam-cpp==0.2.5
+
+# Audio: internal (system/loopback) recording on Windows
+PyAudioWPatch>=0.2.12.0
+# Optional: bundled ffmpeg for mux_audio_into_video when ffmpeg not on PATH
+imageio-ffmpeg>=0.4.9
+pyautogui=0.9.54
+keyboard=0.13.5
