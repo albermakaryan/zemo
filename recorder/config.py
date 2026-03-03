@@ -17,6 +17,7 @@ RECORDINGS_DIR = PROJECT_ROOT / RECORDINGS_DIR_NAME
 WEBCAM_SUBDIR = "webcam"
 SCREEN_SUBDIR = "screen"
 AUDIO_SUBDIR = "audio"
+DETECTION_SUBDIR = "detection"
 
 # Separate folder for test runs (python -m tests screen/webcam/audio)
 RECORDINGS_TEST_DIR_NAME = "recordings_test"
@@ -41,6 +42,11 @@ def get_screen_dir() -> Path:
 def get_audio_dir() -> Path:
     """Directory for audio recordings (system/loopback)."""
     return RECORDINGS_DIR / AUDIO_SUBDIR
+
+
+def get_detection_dir() -> Path:
+    """Directory for emotion detection results (CSV per recording)."""
+    return RECORDINGS_DIR / DETECTION_SUBDIR
 
 
 def get_test_recordings_dir() -> Path:
@@ -75,7 +81,7 @@ def ensure_recordings_dirs() -> None:
     """Create recordings base and subfolders if they don't exist."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     (RECORDINGS_DIR / ".gitkeep").touch(exist_ok=True)
-    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR):
+    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR, DETECTION_SUBDIR):
         subdir = RECORDINGS_DIR / sub
         subdir.mkdir(parents=True, exist_ok=True)
         (subdir / ".gitkeep").touch(exist_ok=True)

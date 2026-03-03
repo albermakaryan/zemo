@@ -5,17 +5,18 @@ Desktop app to record screen and/or webcam as MP4, with a floating start/stop bu
 ## Features
 
 - **Screen** and **webcam** recording (separate or both at once, synced)
-- **System audio (Windows only)** via WASAPI loopback + PyAudioWPatch (what you hear from the speakers)
+- **System audio**: Windows via WASAPI (PyAudioWPatch); Linux via PulseAudio/PipeWire monitor (sounddevice)
 - **MP4** video output for webcam and screen
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
 - **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, and `recordings/audio/`
+- **Emotion detection** overlay on webcam preview; CSV saved only while recording to `recordings/detection/<email>_emotion.csv`
 
 ## Requirements
 
 - Python 3.12+ (see `pyproject.toml`)
 - **Windows 10+ or Linux** for screen + webcam recording
-- **Windows only** for system audio recording (WASAPI loopback via PyAudioWPatch)
+- **Windows**: system audio via `pip install -e ".[windows]"` (PyAudioWPatch). **Linux**: system audio via `pip install -e ".[linux]"` (sounddevice + PulseAudio/PipeWire)
 
 ## Setup (once per machine)
 
@@ -71,6 +72,38 @@ zemo/
     ├── screen/          # Screen MP4s
     └── audio/           # System audio WAVs (Windows only)
 ```
+
+## Testing emotion detection results
+
+After recording with emotion detection on, the CSV is at `recordings/detection/<email>_emotion.csv`. To view a summary (row count, time range, emotion distribution, sample rows):
+
+```bash
+python scripts/view_emotion_csv.py recordings/detection/makaryanalber@gmail.com_emotion.csv
+# or, to use the latest CSV in that folder:
+python scripts/view_emotion_csv.py
+```
+
+To run full pipeline emotion analysis on existing webcam + screen videos (writes a new CSV and annotated video):
+
+```bash
+python analyze_recording.py --webcam recordings/webcam/<email>_webcam.mp4 --screen recordings/screen/<email>_screen.mp4
+```
+
+## Test audio only (no full app)
+
+To check system audio capture without the full app:
+
+- `./run_audio_test.sh` — record 15 s to `recordings_test/audio/`
+- `./run_audio_test.sh 20` — record 20 s
+- `python3 -m tests audio --seconds 10`
+
+Play a video in the browser while it runs; the WAV should contain that audio. Linux: `pip install -e ".[linux]"` and Pulse/PipeWire running.
+
+## Why is audio “(no system audio)” or failed?
+
+- **On Windows:** install `pip install -e ".[windows]"` (PyAudioWPatch). If it still fails, check that you have a default playback device.
+- **On Linux:** install `pip install -e ".[linux]"` (sounddevice) for PulseAudio/PipeWire monitor. If still "(no system audio)", ensure Pulse/PipeWire is running and a monitor source exists.
+- **On macOS:** system audio is not implemented.
 
 ## Configuration
 

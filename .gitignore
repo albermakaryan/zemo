@@ -4,12 +4,16 @@ recordings/*
 !recordings/webcam/.gitkeep
 !recordings/screen/.gitkeep
 !recordings/audio/.gitkeep
+!recordings/detection/.gitkeep
 __pycache__/
 *.pyc
-./drafts/*
-./recordings_test/*
-./dist/*
-build/*
+drafts/
+recordings_test/
+dist/
+build/
+detector/
+analysis/
+scripts/
 
 # Editor / OS junk
 .vscode/

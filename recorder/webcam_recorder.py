@@ -29,6 +29,11 @@ class WebcamRecorder:
         self.recording = False
         self.filename = ""
         self._pending_recording = None  # (save_dir, barrier, email) when user clicks Record
+        self._overlay_callback = None  # optional callback(frame, elapsed_s) — draws on frame in place for preview
+
+    def set_overlay_callback(self, callback):
+        """Set or clear optional overlay. Callback(frame, elapsed_s, is_recording) draws on frame in place; CSV should be written only when is_recording is True."""
+        self._overlay_callback = callback
 
     def start_preview(self):
         """Start capture thread in preview-only mode (no file). Call begin_recording() later to start writing."""
@@ -72,16 +77,24 @@ class WebcamRecorder:
             self._thread.join(timeout=timeout)
 
     def _run(self, preview_only, save_dir=None, start_barrier=None, email=None):
-        if sys.platform == "win32" and hasattr(cv2, "CAP_MSMF"):
-            cap = cv2.VideoCapture(config.CAMERA_INDEX, cv2.CAP_MSMF)
-        else:
-            cap = None
-        if cap is None or not cap.isOpened():
+        cap = None
+        # Try config index first, then 0, 1, 2, ... (some systems expose camera on different indices)
+        indices_to_try = [config.CAMERA_INDEX]
+        for i in range(5):
+            if i not in indices_to_try:
+                indices_to_try.append(i)
+        for idx in indices_to_try:
+            if sys.platform == "win32" and hasattr(cv2, "CAP_MSMF"):
+                cap = cv2.VideoCapture(idx, cv2.CAP_MSMF)
+            else:
+                cap = cv2.VideoCapture(idx)
+            if cap is not None and cap.isOpened():
+                break
             if cap is not None:
                 cap.release()
-            cap = cv2.VideoCapture(config.CAMERA_INDEX)
-        if not cap.isOpened():
-            self.on_status("error", "Cannot open webcam")
+                cap = None
+        if cap is None or not cap.isOpened():
+            self.on_status("error", "No webcam found (tried indices 0–4). Check /dev/video* or camera permissions.")
             return
 
         src_w = make_even(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
@@ -159,6 +172,11 @@ class WebcamRecorder:
                     sleep_until = next_write_time - time.time()
                     if sleep_until > 0.002:
                         time.sleep(sleep_until)
+                if self._overlay_callback is not None:
+                    try:
+                        self._overlay_callback(frame, elapsed, self.recording)
+                    except Exception:
+                        pass
                 preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
                 self.on_frame(preview, elapsed)
         finally:

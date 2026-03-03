@@ -12,12 +12,17 @@ dependencies = [
     "imageio-ffmpeg>=0.4.9",
     "pyautogui==0.9.54",
     "keyboard==0.13.5",
+    "deepface>=0.0.79",
+    "tf-keras>=2.20.1",
 ]
 
 [project.optional-dependencies]
-# Windows-only: faster screen capture (dxcam) and system audio (WASAPI).
-# On Linux/macOS the app uses mss for screen and does not offer system audio.
+# Windows: faster screen capture (dxcam) and system audio (WASAPI).
 windows = [
     "dxcam-cpp==0.2.5",
     "PyAudioWPatch>=0.2.12.0",
+]
+# Linux: system audio via PulseAudio/PipeWire monitor (sounddevice).
+linux = [
+    "sounddevice>=0.4.6",
 ]

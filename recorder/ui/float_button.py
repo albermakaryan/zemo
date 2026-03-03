@@ -9,6 +9,7 @@ class FloatButtonWindow(tk.Toplevel):
     """Always-on-top floating window with one big circular Start/Stop button and countdown."""
 
     SIZE = 120  # circular button window (width = height)
+    DRAG_HANDLE_H = 20  # height of top drag handle
 
     def __init__(self, app):
         super().__init__(app)
@@ -22,14 +23,37 @@ class FloatButtonWindow(tk.Toplevel):
         self.wm_attributes("-topmost", True)
         self.overrideredirect(True)
 
+        self._drag_start_x = self._drag_start_y = None
+        self._drag_win_x = self._drag_win_y = None
+        self._drag_moved = False
+        self._drag_threshold = 3  # pixels before we consider it a drag
+
+        # Top drag handle: drag from here never triggers start/stop.
+        # Bind on both Frame and Label so click on label text still starts drag.
+        self._handle = tk.Frame(
+            self, height=self.DRAG_HANDLE_H, bg=config.BG3,
+            cursor="fleur", highlightthickness=0,
+        )
+        self._handle.pack(fill="x")
+        self._handle.pack_propagate(False)
+        for w in (self._handle,):
+            w.bind("<Button-1>", self._on_press_handle)
+            w.bind("<B1-Motion>", self._on_drag)
+            w.bind("<ButtonRelease-1>", lambda e: None)
+        self._handle_lbl = tk.Label(
+            self._handle, text="⋮⋮ drag", font=("Segoe UI", 9), bg=config.BG3, fg=config.FG2,
+            cursor="fleur",
+        )
+        self._handle_lbl.pack(expand=True)
+        self._handle_lbl.bind("<Button-1>", self._on_press_handle)
+        self._handle_lbl.bind("<B1-Motion>", self._on_drag)
+        self._handle_lbl.bind("<ButtonRelease-1>", lambda e: None)
+
         self._canvas = tk.Canvas(
             self, width=self.SIZE, height=self.SIZE,
             bg=config.BG2, highlightthickness=0, cursor="hand2",
         )
         self._canvas.pack(padx=4, pady=4)
-        self._drag_start_x = self._drag_start_y = None
-        self._drag_win_x = self._drag_win_y = None
-        self._drag_moved = False
         self._canvas.bind("<Button-1>", self._on_press)
         self._canvas.bind("<B1-Motion>", self._on_drag)
         self._canvas.bind("<ButtonRelease-1>", self._on_release)
@@ -45,7 +69,7 @@ class FloatButtonWindow(tk.Toplevel):
             fill=config.FLOAT_START_FG,
         )
 
-        self.geometry(f"{self.SIZE + 8}x{self.SIZE + 8}")
+        self.geometry(f"{self.SIZE + 8}x{self.SIZE + self.DRAG_HANDLE_H + 8}")
         self.bind("<Button-1>", self._on_press)
         self.bind("<B1-Motion>", self._on_drag)
         self.bind("<ButtonRelease-1>", self._on_release_window)
@@ -60,30 +84,48 @@ class FloatButtonWindow(tk.Toplevel):
         except Exception:
             self.geometry(f"+100+{config.FLOAT_TOP_OFFSET}")
 
-    def _on_press(self, e):
+    def _start_drag(self, e, allow_toggle_on_click=False):
+        """Start drag tracking; if allow_toggle_on_click, release without move will toggle."""
         self._drag_start_x = e.x_root
         self._drag_start_y = e.y_root
         self._drag_win_x = self.winfo_rootx()
         self._drag_win_y = self.winfo_rooty()
         self._drag_moved = False
-        self._drag_pressed_on_canvas = e.widget == self._canvas
+        self._drag_pressed_on_canvas = allow_toggle_on_click
+        try:
+            self.grab_set()  # keep receiving events when cursor leaves window (Linux/X11)
+        except tk.TclError:
+            pass
         self._app.bind_all("<B1-Motion>", self._on_drag)
         self._app.bind_all("<ButtonRelease-1>", self._on_release_anywhere)
+
+    def _on_press_handle(self, e):
+        """Press on drag handle: only drag, never toggle."""
+        self._start_drag(e, allow_toggle_on_click=False)
+
+    def _on_press(self, e):
+        """Press on canvas or window: drag or toggle on release."""
+        self._start_drag(e, allow_toggle_on_click=(e.widget == self._canvas))
 
     def _on_drag(self, e):
         if not self.winfo_exists():
             return
         dx = e.x_root - self._drag_start_x
         dy = e.y_root - self._drag_start_y
-        if abs(dx) > 5 or abs(dy) > 5:
+        if abs(dx) > self._drag_threshold or abs(dy) > self._drag_threshold:
             self._drag_moved = True
         self.geometry(f"+{self._drag_win_x + dx}+{self._drag_win_y + dy}")
+        self.update_idletasks()
         self._drag_start_x = e.x_root
         self._drag_start_y = e.y_root
         self._drag_win_x = self.winfo_rootx()
         self._drag_win_y = self.winfo_rooty()
 
     def _on_release_anywhere(self, e):
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
         self._app.unbind_all("<B1-Motion>")
         self._app.unbind_all("<ButtonRelease-1>")
         if self.winfo_exists() and self._drag_pressed_on_canvas and not self._drag_moved:

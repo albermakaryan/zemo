@@ -11,3 +11,4 @@ PyAudioWPatch>=0.2.12.0
 imageio-ffmpeg>=0.4.9
 pyautogui=0.9.54
 keyboard=0.13.5
+deepface>=0.0.79
