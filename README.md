@@ -1,6 +1,6 @@
 # Screen & Webcam Recorder
 
-Desktop app to record screen and/or webcam as MP4, with a floating start/stop button and optional countdown.
+Desktop app to record screen and/or webcam as MP4, with a floating movable start/stop button and optional countdown. Includes an in-preview emotion detection overlay and per-recording emotion CSV export.
 
 ## Features
 
@@ -10,7 +10,7 @@ Desktop app to record screen and/or webcam as MP4, with a floating start/stop bu
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
 - **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, and `recordings/audio/`
-- **Emotion detection** overlay on webcam preview; CSV saved only while recording to `recordings/detection/<email>_emotion.csv`
+- **Emotion detection** overlay on webcam preview (independent toggle button); CSV saved **only while recording is running** to `recordings/detection/<email>_emotion.csv`
 
 ## Requirements
 
@@ -64,13 +64,13 @@ zemo/
 ├── recorder/            # Package
 │   ├── __init__.py
 │   ├── config.py        # Paths, constants, theme
-│   ├── ui/              # App, panels, float button
-│   ├── audio/           # Internal (system) audio recorder (Windows only)
+│   ├── ui/              # App, panels, float button, detection toggle
+│   ├── audio/           # Internal (system) audio recorder (Windows + Linux backends)
 │   └── screen_recorder.py, webcam_recorder.py, ...
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
     ├── screen/          # Screen MP4s
-    └── audio/           # System audio WAVs (Windows only)
+    └── audio/           # System audio WAVs (when available)
 ```
 
 ## Testing emotion detection results
