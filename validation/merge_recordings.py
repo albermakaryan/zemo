@@ -38,6 +38,7 @@ def _load_audio_wav(path: Path) -> Tuple[np.ndarray, int]:
     """Load WAV as float32 array (channels, samples) and sample rate."""
     try:
         import wave
+
         with wave.open(str(path), "rb") as w:
             sr = w.getframerate()
             nch = w.getnchannels()
@@ -72,13 +73,31 @@ class SyncedRecordings:
     ):
         self.fps = fps
         self.audio_sr = audio_sample_rate
-        self._cap_webcam = cv2.VideoCapture(str(webcam_path)) if webcam_path.exists() else None
-        self._cap_screen = cv2.VideoCapture(str(screen_path)) if screen_path.exists() else None
-        self._audio, _ = _load_audio_wav(audio_path) if audio_path.exists() else (np.zeros((2, 0), dtype=np.float32), audio_sample_rate)
-        self._n_frames_webcam = int(self._cap_webcam.get(cv2.CAP_PROP_FRAME_COUNT)) if self._cap_webcam and self._cap_webcam.isOpened() else 0
-        self._n_frames_screen = int(self._cap_screen.get(cv2.CAP_PROP_FRAME_COUNT)) if self._cap_screen and self._cap_screen.isOpened() else 0
+        self._cap_webcam = (
+            cv2.VideoCapture(str(webcam_path)) if webcam_path.exists() else None
+        )
+        self._cap_screen = (
+            cv2.VideoCapture(str(screen_path)) if screen_path.exists() else None
+        )
+        self._audio, _ = (
+            _load_audio_wav(audio_path)
+            if audio_path.exists()
+            else (np.zeros((2, 0), dtype=np.float32), audio_sample_rate)
+        )
+        self._n_frames_webcam = (
+            int(self._cap_webcam.get(cv2.CAP_PROP_FRAME_COUNT))
+            if self._cap_webcam and self._cap_webcam.isOpened()
+            else 0
+        )
+        self._n_frames_screen = (
+            int(self._cap_screen.get(cv2.CAP_PROP_FRAME_COUNT))
+            if self._cap_screen and self._cap_screen.isOpened()
+            else 0
+        )
         self._n_audio_samples = self._audio.shape[1] if self._audio.size else 0
-        self.duration_sec = self._n_frames_webcam / fps if self._n_frames_webcam else 0.0
+        self.duration_sec = (
+            self._n_frames_webcam / fps if self._n_frames_webcam else 0.0
+        )
 
     def __enter__(self):
         return self
@@ -101,7 +120,9 @@ class SyncedRecordings:
         """Convert frame index to time in seconds (common time base)."""
         return frame_index / self.fps
 
-    def time_sec_to_audio_sample_range(self, t_start: float, t_end: float) -> Tuple[int, int]:
+    def time_sec_to_audio_sample_range(
+        self, t_start: float, t_end: float
+    ) -> Tuple[int, int]:
         """Convert time range (seconds) to audio sample indices [start, end)."""
         s0 = int(t_start * self.audio_sr)
         s1 = int(t_end * self.audio_sr)
@@ -134,7 +155,9 @@ class SyncedRecordings:
             return np.zeros((self._audio.shape[0], 0), dtype=np.float32)
         return self._audio[:, s0:s1].copy()
 
-    def get_audio_for_time_range(self, t_start_sec: float, t_end_sec: float) -> np.ndarray:
+    def get_audio_for_time_range(
+        self, t_start_sec: float, t_end_sec: float
+    ) -> np.ndarray:
         """Get audio for a time window in seconds: (channels, samples) float32."""
         s0, s1 = self.time_sec_to_audio_sample_range(t_start_sec, t_end_sec)
         if s0 >= s1:
@@ -179,6 +202,7 @@ def open_synced(email: str, recordings_root: Optional[Path] = None) -> SyncedRec
                 pass
     """
     from recorder.config import RECORDINGS_DIR
+
     root = Path(recordings_root) if recordings_root else RECORDINGS_DIR
     if not email or email.strip().lower() == "user":
         base = _latest_recording_base(root)
@@ -193,14 +217,21 @@ def open_synced(email: str, recordings_root: Optional[Path] = None) -> SyncedRec
 
 if __name__ == "__main__":
     from recorder.config import RECORDINGS_DIR
+
     email = sys.argv[1].strip() if len(sys.argv) > 1 else ""
-    base = _latest_recording_base(RECORDINGS_DIR) if not email or email.lower() == "user" else None
+    base = (
+        _latest_recording_base(RECORDINGS_DIR)
+        if not email or email.lower() == "user"
+        else None
+    )
     if base:
         email = base
         print("Using latest recording:", email)
     elif not email:
         print("Usage: python -m validation.merge_recordings [email]")
-        print("  If no email given, uses the most recent recording in recordings/webcam/")
+        print(
+            "  If no email given, uses the most recent recording in recordings/webcam/"
+        )
         sys.exit(1)
     with open_synced(email) as synced:
         print("FPS:", synced.fps)
@@ -210,4 +241,6 @@ if __name__ == "__main__":
             a = synced.get_audio_for_frame(0)
             print("Audio shape for frame 0:", a.shape)
         else:
-            print("No frames found. Check that recordings/webcam/ and recordings/screen/ have matching *_webcam.mp4 and *_screen.mp4")
+            print(
+                "No frames found. Check that recordings/webcam/ and recordings/screen/ have matching *_webcam.mp4 and *_screen.mp4"
+            )

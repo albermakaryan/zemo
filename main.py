@@ -42,6 +42,7 @@ def _check_deps():
     try:
         import tkinter as tk
         from tkinter import messagebox
+
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
@@ -56,6 +57,7 @@ def _check_deps():
 def main():
     _check_deps()
     from recorder.ui import App
+
     app = App()
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     try:

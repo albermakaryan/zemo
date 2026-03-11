@@ -90,4 +90,3 @@ class DeepFaceEmotionModel:
             emotion_pct=emotion_pct,
             face_bbox=face_bbox,
         )
-

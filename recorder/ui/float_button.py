@@ -31,8 +31,11 @@ class FloatButtonWindow(tk.Toplevel):
         # Top drag handle: drag from here never triggers start/stop.
         # Bind on both Frame and Label so click on label text still starts drag.
         self._handle = tk.Frame(
-            self, height=self.DRAG_HANDLE_H, bg=config.BG3,
-            cursor="fleur", highlightthickness=0,
+            self,
+            height=self.DRAG_HANDLE_H,
+            bg=config.BG3,
+            cursor="fleur",
+            highlightthickness=0,
         )
         self._handle.pack(fill="x")
         self._handle.pack_propagate(False)
@@ -41,7 +44,11 @@ class FloatButtonWindow(tk.Toplevel):
             w.bind("<B1-Motion>", self._on_drag)
             w.bind("<ButtonRelease-1>", lambda e: None)
         self._handle_lbl = tk.Label(
-            self._handle, text="⋮⋮ drag", font=("Segoe UI", 9), bg=config.BG3, fg=config.FG2,
+            self._handle,
+            text="⋮⋮ drag",
+            font=("Segoe UI", 9),
+            bg=config.BG3,
+            fg=config.FG2,
             cursor="fleur",
         )
         self._handle_lbl.pack(expand=True)
@@ -50,8 +57,12 @@ class FloatButtonWindow(tk.Toplevel):
         self._handle_lbl.bind("<ButtonRelease-1>", lambda e: None)
 
         self._canvas = tk.Canvas(
-            self, width=self.SIZE, height=self.SIZE,
-            bg=config.BG2, highlightthickness=0, cursor="hand2",
+            self,
+            width=self.SIZE,
+            height=self.SIZE,
+            bg=config.BG2,
+            highlightthickness=0,
+            cursor="hand2",
         )
         self._canvas.pack(padx=4, pady=4)
         self._canvas.bind("<Button-1>", self._on_press)
@@ -60,12 +71,19 @@ class FloatButtonWindow(tk.Toplevel):
 
         r = 4
         self._oval_id = self._canvas.create_oval(
-            r, r, self.SIZE - r, self.SIZE - r,
-            fill=config.FLOAT_START_BG, outline=config.BORDER, width=2,
+            r,
+            r,
+            self.SIZE - r,
+            self.SIZE - r,
+            fill=config.FLOAT_START_BG,
+            outline=config.BORDER,
+            width=2,
         )
         self._text_id = self._canvas.create_text(
-            self.SIZE // 2, self.SIZE // 2,
-            text="⏺", font=("Segoe UI", 32, "bold"),
+            self.SIZE // 2,
+            self.SIZE // 2,
+            text="⏺",
+            font=("Segoe UI", 32, "bold"),
             fill=config.FLOAT_START_FG,
         )
 
@@ -128,7 +146,11 @@ class FloatButtonWindow(tk.Toplevel):
             pass
         self._app.unbind_all("<B1-Motion>")
         self._app.unbind_all("<ButtonRelease-1>")
-        if self.winfo_exists() and self._drag_pressed_on_canvas and not self._drag_moved:
+        if (
+            self.winfo_exists()
+            and self._drag_pressed_on_canvas
+            and not self._drag_moved
+        ):
             self._toggle()
         self._drag_start_x = self._drag_start_y = None
 
@@ -145,7 +167,9 @@ class FloatButtonWindow(tk.Toplevel):
         a = self._app
         w = getattr(a._webcam_panel, "recorder", None)
         s = getattr(a._screen_panel, "recorder", None)
-        return (w and getattr(w, "recording", False)) or (s and getattr(s, "recording", False))
+        return (w and getattr(w, "recording", False)) or (
+            s and getattr(s, "recording", False)
+        )
 
     def _toggle(self):
         if self._is_recording():
@@ -165,7 +189,9 @@ class FloatButtonWindow(tk.Toplevel):
         self._countdown_remaining = config.COUNTDOWN_SECONDS
         self._canvas.config(cursor="")
         self._canvas.itemconfig(self._oval_id, fill=config.BG3)
-        self._canvas.itemconfig(self._text_id, text=str(self._countdown_remaining), fill=config.FG2)
+        self._canvas.itemconfig(
+            self._text_id, text=str(self._countdown_remaining), fill=config.FG2
+        )
         self._countdown_tick()
 
     def _countdown_tick(self):

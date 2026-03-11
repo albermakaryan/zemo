@@ -6,7 +6,12 @@ import sys
 def check_deps(verbose: bool = True) -> bool:
     """Return True if all required deps are available."""
     missing = []
-    for name, pkg in [("opencv-python", "cv2"), ("numpy", "numpy"), ("mss", "mss"), ("Pillow", "PIL")]:
+    for name, pkg in [
+        ("opencv-python", "cv2"),
+        ("numpy", "numpy"),
+        ("mss", "mss"),
+        ("Pillow", "PIL"),
+    ]:
         try:
             __import__(pkg)
             if verbose:

@@ -22,6 +22,7 @@ from recorder.common import email_filename_part
 try:
     import sounddevice as sd
     import numpy as np
+
     _HAS_SOUNDDEVICE = True
 except ImportError:
     sd = None
@@ -65,6 +66,7 @@ def is_loopback_available() -> bool:
         # Sounddevice may not expose monitor names; try PulseAudio/PipeWire by name
         if sys.platform == "linux" and _get_pulse_monitor_source_name() is not None:
             import shutil
+
             if shutil.which("parecord"):
                 return True
         return False
@@ -85,7 +87,8 @@ def _get_monitor_device_index() -> Optional[int]:
         default_out = sd.query_devices(kind="output")
         default_sink_name = (
             (default_out.get("name", "") if isinstance(default_out, dict) else "")
-            .strip().lower()
+            .strip()
+            .lower()
         )
         first_monitor = None
         for i in range(256):
@@ -123,7 +126,11 @@ def _get_monitor_device_index() -> Optional[int]:
 class InternalAudioRecorder:
     """Record internal (system) audio on Linux/macOS via PulseAudio/PipeWire or sounddevice."""
 
-    def __init__(self, on_status: Optional[Callable[[str, str], None]] = None, on_done: Optional[Callable[[str], None]] = None):
+    def __init__(
+        self,
+        on_status: Optional[Callable[[str, str], None]] = None,
+        on_done: Optional[Callable[[str], None]] = None,
+    ):
         self.on_status = on_status or (lambda _s, _m: None)
         self.on_done = on_done or (lambda _f: None)
         self._stop = threading.Event()
@@ -148,7 +155,11 @@ class InternalAudioRecorder:
             self.on_status("error", "This implementation is for Linux/macOS only")
             return
         dev_idx = _get_monitor_device_index()
-        pulse_monitor = _get_pulse_monitor_source_name() if dev_idx is None and sys.platform == "linux" else None
+        pulse_monitor = (
+            _get_pulse_monitor_source_name()
+            if dev_idx is None and sys.platform == "linux"
+            else None
+        )
         if dev_idx is None and pulse_monitor is None:
             if sys.platform == "darwin":
                 self.on_status(
@@ -171,9 +182,13 @@ class InternalAudioRecorder:
         name_part = email_filename_part(email) if email else "user"
         self.filename = str(save_path / f"{name_part}_audio{config.AUDIO_EXT}")
         if dev_idx is not None:
-            self._thread = threading.Thread(target=self._run, args=(dev_idx,), daemon=True)
+            self._thread = threading.Thread(
+                target=self._run, args=(dev_idx,), daemon=True
+            )
         else:
-            self._thread = threading.Thread(target=self._run_parecord, args=(pulse_monitor,), daemon=True)
+            self._thread = threading.Thread(
+                target=self._run_parecord, args=(pulse_monitor,), daemon=True
+            )
         self._thread.start()
 
     def stop(self, stop_time: Optional[float] = None) -> None:
@@ -195,7 +210,9 @@ class InternalAudioRecorder:
         chunk_bytes = 4096
 
         try:
-            self.on_status("recording", f"→ {Path(self.filename).name} (system audio, parecord)")
+            self.on_status(
+                "recording", f"→ {Path(self.filename).name} (system audio, parecord)"
+            )
             if self._start_barrier is not None:
                 self._start_barrier.wait()
             ref = self._start_time_ref
@@ -204,7 +221,8 @@ class InternalAudioRecorder:
             proc = subprocess.Popen(
                 [
                     "parecord",
-                    "-d", monitor_source_name,
+                    "-d",
+                    monitor_source_name,
                     "--rate=%d" % sample_rate,
                     "--channels=%d" % nchannels,
                     "--format=s16ne",
@@ -239,7 +257,9 @@ class InternalAudioRecorder:
             start_offset = max(0.0, t0_val - video_t0_val)
             elapsed_audio = t_final - t0_val
             bytes_per_frame = nchannels * sampwidth
-            expected_body_frames = int(elapsed_audio * sample_rate) if elapsed_audio > 0 else 0
+            expected_body_frames = (
+                int(elapsed_audio * sample_rate) if elapsed_audio > 0 else 0
+            )
             offset_frames = int(start_offset * sample_rate)
             total_frames_video = int((t_final - video_t0_val) * sample_rate)
 
@@ -264,7 +284,9 @@ class InternalAudioRecorder:
             data_to_write = silence_pre + bytes(audio_body)
             frames_so_far = offset_frames + expected_body_frames
             if frames_so_far < total_frames_video:
-                data_to_write += b"\x00" * ((total_frames_video - frames_so_far) * bytes_per_frame)
+                data_to_write += b"\x00" * (
+                    (total_frames_video - frames_so_far) * bytes_per_frame
+                )
             frames_to_write = total_frames_video
 
             with wave.open(self.filename, "wb") as wf:
@@ -340,7 +362,9 @@ class InternalAudioRecorder:
             start_offset = max(0.0, t0_val - video_t0_val)
             elapsed_audio = t_final - t0_val
             bytes_per_frame = nchannels * sampwidth
-            expected_body_frames = int(elapsed_audio * sample_rate) if elapsed_audio > 0 else 0
+            expected_body_frames = (
+                int(elapsed_audio * sample_rate) if elapsed_audio > 0 else 0
+            )
             offset_frames = int(start_offset * sample_rate)
             total_frames_video = int((t_final - video_t0_val) * sample_rate)
 
@@ -365,7 +389,9 @@ class InternalAudioRecorder:
             data_to_write = silence_pre + bytes(audio_body)
             frames_so_far = offset_frames + expected_body_frames
             if frames_so_far < total_frames_video:
-                data_to_write += b"\x00" * ((total_frames_video - frames_so_far) * bytes_per_frame)
+                data_to_write += b"\x00" * (
+                    (total_frames_video - frames_so_far) * bytes_per_frame
+                )
             frames_to_write = total_frames_video
 
             with wave.open(self.filename, "wb") as wf:

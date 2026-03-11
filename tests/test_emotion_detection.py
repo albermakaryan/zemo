@@ -66,9 +66,7 @@ def main():
         if frame_idx % sample_stride == 0:
             try:
                 t0 = time.time()
-                last_result = model.analyze_frame(
-                    frame, time_s=frame_idx / fps
-                )
+                last_result = model.analyze_frame(frame, time_s=frame_idx / fps)
                 last_inference_time = time.time() - t0
             except Exception as e:
                 # If DeepFace fails on a frame, just keep going

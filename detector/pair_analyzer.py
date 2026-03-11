@@ -40,9 +40,7 @@ def _draw_annotations(
         x, y, w, h = face_bbox
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
     label = f"{top_emotion} {emotion_pct:.0f}%"
-    cv2.putText(
-        frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2
-    )
+    cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 
 
 def analyze_webcam_and_screen(
@@ -129,7 +127,7 @@ def analyze_webcam_and_screen(
                 ]
             )
             for s in samples:
-                x, y, w, h = (s.face_bbox if s.face_bbox else (0, 0, 0, 0))
+                x, y, w, h = s.face_bbox if s.face_bbox else (0, 0, 0, 0)
                 writer.writerow(
                     [
                         f"{s.time_s:.3f}",
@@ -164,9 +162,7 @@ def analyze_webcam_and_screen(
                     cap_webcam2.set(cv2.CAP_PROP_POS_FRAMES, s.webcam_frame_idx)
                     ok, fr = cap_webcam2.read()
                     if ok:
-                        _draw_annotations(
-                            fr, s.top_emotion, s.emotion_pct, s.face_bbox
-                        )
+                        _draw_annotations(fr, s.top_emotion, s.emotion_pct, s.face_bbox)
                         writer.write(fr)
                 writer.release()
                 cap_webcam2.release()
@@ -175,4 +171,3 @@ def analyze_webcam_and_screen(
     finally:
         cap_webcam.release()
         cap_screen.release()
-

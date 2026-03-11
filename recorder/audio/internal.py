@@ -11,6 +11,9 @@ import sys
 if sys.platform == "win32":
     from recorder.audio.internal_win import InternalAudioRecorder, is_loopback_available
 else:
-    from recorder.audio.internal_linux import InternalAudioRecorder, is_loopback_available
+    from recorder.audio.internal_linux import (
+        InternalAudioRecorder,
+        is_loopback_available,
+    )
 
 __all__ = ["InternalAudioRecorder", "is_loopback_available"]

@@ -16,6 +16,7 @@ from recorder.common import email_filename_part
 
 try:
     import pyaudiowpatch as pyaudio
+
     _HAS_PYAUDIOWPATCH = True
 except ImportError:
     pyaudio = None
@@ -124,13 +125,17 @@ class InternalAudioRecorder:
                     return
                 sample_rate = int(device["defaultSampleRate"])
                 nchannels = int(device["maxInputChannels"])
-                self.on_status("recording", f"→ {Path(self.filename).name} (system audio)")
+                self.on_status(
+                    "recording", f"→ {Path(self.filename).name} (system audio)"
+                )
 
                 if self._start_barrier is not None:
                     self._start_barrier.wait()
                 self._stream_started = False
 
-                def callback(in_data: bytes, frame_count: int, time_info: dict, status: int) -> tuple:
+                def callback(
+                    in_data: bytes, frame_count: int, time_info: dict, status: int
+                ) -> tuple:
                     if self._stream_started and not self._stop.is_set():
                         # Wall-clock time so (ts - t0) gives correct offset; time_info values can be 0 or wrong
                         chunks.append((time.time(), in_data))
@@ -149,7 +154,7 @@ class InternalAudioRecorder:
                 t0 = time.time()
                 self._stream_started = True
                 ref = getattr(self, "_start_time_ref", None)
-                video_t0 = (ref[0] if ref and len(ref) and ref[0] is not None else t0)
+                video_t0 = ref[0] if ref and len(ref) and ref[0] is not None else t0
                 self._video_t0 = video_t0
                 try:
                     while not self._stop.is_set():
@@ -171,7 +176,9 @@ class InternalAudioRecorder:
             start_offset = max(0.0, t0_val - video_t0_val)
             elapsed_audio = t_final - t0_val
             bytes_per_frame = nchannels * sampwidth
-            expected_body_frames = int(elapsed_audio * sample_rate) if elapsed_audio > 0 else 0
+            expected_body_frames = (
+                int(elapsed_audio * sample_rate) if elapsed_audio > 0 else 0
+            )
             offset_frames = int(start_offset * sample_rate)
             total_frames_video = int((t_final - video_t0_val) * sample_rate)
 
@@ -198,7 +205,9 @@ class InternalAudioRecorder:
             data_to_write = silence_pre + bytes(audio_body)
             frames_so_far = offset_frames + expected_body_frames
             if frames_so_far < total_frames_video:
-                data_to_write += b"\x00" * ((total_frames_video - frames_so_far) * bytes_per_frame)
+                data_to_write += b"\x00" * (
+                    (total_frames_video - frames_so_far) * bytes_per_frame
+                )
             frames_to_write = total_frames_video
 
             with wave.open(self.filename, "wb") as wf:
