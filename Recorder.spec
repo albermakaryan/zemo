@@ -7,7 +7,9 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        ('VERSION', '.'),           # make VERSION available at runtime
+    ],
     hiddenimports=[
         'recorder',
         'recorder.config',
@@ -22,6 +24,8 @@ a = Analysis(
         'recorder.ui.dialogs',
         'recorder.audio',
         'recorder.audio.internal',
+        'recorder.audio.internal_win',
+        'recorder.audio.internal_linux',
         'pyaudiowpatch',
         'cv2',
         'numpy',
@@ -62,4 +66,5 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # No console window (GUI app)
+    version='version_info.txt',  # embed Windows version resource
 )

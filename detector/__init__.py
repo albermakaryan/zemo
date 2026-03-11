@@ -8,4 +8,3 @@ Current implementation focuses on:
 
 from .emotion_model import EmotionResult, DeepFaceEmotionModel  # noqa: F401
 from .pair_analyzer import analyze_webcam_and_screen  # noqa: F401
-

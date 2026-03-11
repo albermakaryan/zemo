@@ -44,13 +44,41 @@ Desktop app to record screen and/or webcam as MP4, with a floating movable start
 
 If Python is missing, the batch file opens the Python download page.
 
+## Recording & audio syncing
+
+- Clicking **Record Both** starts:
+  - Webcam recording to `recordings/webcam/<email>_webcam.mp4`
+  - Screen recording to `recordings/screen/<email>_screen.mp4`
+  - Internal/system audio (when available) to `recordings/audio/<email>_audio.wav`
+- All three share:
+  - A common **start barrier** so they begin at the same time.
+  - A shared **wall-clock start time** and **stop time** when you click **Stop Both**.
+- The internal audio recorder stores chunks with timestamps and later builds a WAV that:
+  - Includes any needed silence at the start so it lines up with video.
+  - Pads/trims so its total duration matches the video timeline.
+- After **Stop Both**, the app automatically runs the mux script:
+  - It calls `python -m recorder.audio.mux_audio_into_video --screen-only <email>`
+  - This uses ffmpeg with `aresample=async=1:first_pts=0` and `-vsync cfr` to keep audio/video aligned.
+  - The final synced file is written to `recordings/screen_with_audio/<email>_screen_with_audio.mp4`.
+
 ## Build a standalone .exe (Windows)
 
 1. Install dependencies and run the app at least once: `pip install -r requirements.txt`
-2. Double-click **`build_exe.bat`** (or in a terminal: `pyinstaller --clean Recorder.spec`)
-3. The executable is created at **`dist\Recorder.exe`**
+2. From the project root, run **`build_exe.bat`** (double-click or from a terminal).
+3. The executable is created at **`dist\Recorder_<version>.exe`** (for example `Recorder_1.2.3.exe`).
 
-Copy `Recorder.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, and `audio/` inside) for saving videos. No Python installation needed on that machine.
+When you run `build_exe.bat`:
+
+- **Version source of truth** is the `VERSION` file in the project root.
+- The script bumps the version **automatically** and writes it back to `VERSION`:
+  - No argument (default) or `patch` → `MAJOR.MINOR.(PATCH+1)` (e.g. `1.2.3 → 1.2.4`)
+  - `minor` → `MAJOR.(MINOR+1).0` (e.g. `1.2.3 → 1.3.0`)
+  - `major` → `(MAJOR+1).0.0` (e.g. `1.2.3 → 2.0.0`)
+  - Explicit version like `build_exe.bat 1.4.0` sets `VERSION` to `1.4.0` directly.
+- It then runs `python build_version_info.py <version>` to regenerate `version_info.txt` so the Windows file properties match.
+- Finally it builds using `Recorder.spec` and copies `dist\Recorder.exe` to `dist\Recorder_<version>.exe`.
+
+The app window title shows the current version (e.g. `Recorder v1.2.4`). You can copy `Recorder_<version>.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, and `audio/` inside) for saving videos. No Python installation needed on that machine.
 
 ## Project layout
 

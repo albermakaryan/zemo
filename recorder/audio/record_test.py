@@ -14,6 +14,7 @@ import time
 
 # Ensure project root is on path
 from pathlib import Path
+
 _root = Path(__file__).resolve().parent.parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
@@ -46,7 +47,11 @@ def main():
     print("Workflow:")
     print("  1. Recording will start in {} seconds.".format(GET_READY_SEC))
     print("  2. Open your video (e.g. YouTube in browser) and get ready to press Play.")
-    print("  3. When recording starts, press Play — we'll capture that audio for {} seconds.".format(RECORD_SEC))
+    print(
+        "  3. When recording starts, press Play — we'll capture that audio for {} seconds.".format(
+            RECORD_SEC
+        )
+    )
     print()
     for i in range(GET_READY_SEC, 0, -1):
         print("  Starting in {}...".format(i))

@@ -32,11 +32,13 @@ def _dxcam_module():
         return None
     try:
         import dxcam_cpp as dxcam
+
         _dxcam = dxcam
         return _dxcam
     except ImportError:
         try:
             import dxcam
+
             _dxcam = dxcam
             return _dxcam
         except ImportError:
@@ -48,6 +50,7 @@ class ScreenRecorder:
     Screen recording via dxcam (Windows) or mss. One frame per time slot so
     playback matches real time. Uses same API as drafts/dxcam_recorder.py.
     """
+
     def __init__(self, on_frame, on_status, on_done):
         self.on_frame = on_frame
         self.on_status = on_status
@@ -57,13 +60,17 @@ class ScreenRecorder:
         self._thread = None
         self.recording = False
         self.filename = ""
-        self._pending_recording = None  # (save_dir, barrier, email) when switching from preview to record
+        self._pending_recording = (
+            None  # (save_dir, barrier, email) when switching from preview to record
+        )
 
     def start_preview(self):
         """Start capture thread in preview-only mode (no file). Call begin_recording() later to start writing."""
         self._stop.clear()
         self._pending_recording = None
-        self._thread = threading.Thread(target=self._run, args=(True, None, None, None), daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, args=(True, None, None, None), daemon=True
+        )
         self._thread.start()
 
     def begin_recording(self, save_dir, start_barrier=None, email=None):
@@ -87,7 +94,9 @@ class ScreenRecorder:
         (save_path / ".gitkeep").touch(exist_ok=True)
         name_part = email_filename_part(email) if email else "user"
         self.filename = str(save_path / f"{name_part}_screen{config.VIDEO_EXT}")
-        self._thread = threading.Thread(target=self._run, args=(False, save_dir, start_barrier, email), daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, args=(False, save_dir, start_barrier, email), daemon=True
+        )
         self._thread.start()
 
     def stop(self, stop_time=None):
@@ -128,8 +137,13 @@ class ScreenRecorder:
                 frame = camera.get_latest_frame()
                 if frame is not None:
                     nat_h, nat_w = frame.shape[:2]
-                    if config.RECORDING_WIDTH is not None and config.RECORDING_HEIGHT is not None:
-                        w, h = make_even(config.RECORDING_WIDTH), make_even(config.RECORDING_HEIGHT)
+                    if (
+                        config.RECORDING_WIDTH is not None
+                        and config.RECORDING_HEIGHT is not None
+                    ):
+                        w, h = make_even(config.RECORDING_WIDTH), make_even(
+                            config.RECORDING_HEIGHT
+                        )
                     else:
                         w, h = make_even(nat_w), make_even(nat_h)
                     if (frame.shape[1], frame.shape[0]) != (w, h):
@@ -165,7 +179,9 @@ class ScreenRecorder:
                     save_dir_p, barrier, _ = self._pending_recording
                     self._pending_recording = None
                     for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                        out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
+                        out, ok = create_writer(
+                            self.filename, fourcc_str, config.FPS, w, h
+                        )
                         if ok:
                             break
                         if out:
@@ -233,9 +249,13 @@ class ScreenRecorder:
     def _run_mss(self, preview_only, save_dir):
         """Fallback when dxcam not available."""
         import mss
+
         with mss.mss() as sct:
             monitor = sct.monitors[config.MONITOR_INDEX]
-            if config.RECORDING_WIDTH is not None and config.RECORDING_HEIGHT is not None:
+            if (
+                config.RECORDING_WIDTH is not None
+                and config.RECORDING_HEIGHT is not None
+            ):
                 w = make_even(config.RECORDING_WIDTH)
                 h = make_even(config.RECORDING_HEIGHT)
             else:
@@ -268,7 +288,9 @@ class ScreenRecorder:
                         save_dir_p, barrier, _ = self._pending_recording
                         self._pending_recording = None
                         for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                            out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
+                            out, ok = create_writer(
+                                self.filename, fourcc_str, config.FPS, w, h
+                            )
                             if ok:
                                 break
                             if out:
@@ -304,7 +326,9 @@ class ScreenRecorder:
                                 next_write_time += frame_interval
                             else:
                                 next_write_time = t_now + frame_interval
-                            preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
+                            preview = resize_frame(
+                                frame, config.PREVIEW_W, config.PREVIEW_H
+                            )
                             self.on_frame(preview, time.time() - t0)
                         except Exception:
                             if out is not None:

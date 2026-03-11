@@ -20,7 +20,9 @@ from detector import analyze_webcam_and_screen
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Analyze emotions and align webcam/screen videos.")
+    parser = argparse.ArgumentParser(
+        description="Analyze emotions and align webcam/screen videos."
+    )
     parser.add_argument(
         "--webcam",
         required=True,
@@ -50,7 +52,9 @@ def main() -> None:
     if args.out:
         out_csv = Path(args.out)
     else:
-        out_csv = webcam_path.with_suffix("").with_name(webcam_path.stem + "_emotions.csv")
+        out_csv = webcam_path.with_suffix("").with_name(
+            webcam_path.stem + "_emotions.csv"
+        )
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     out_video = out_csv.parent / (webcam_path.stem + "_annotated.mp4")
@@ -74,4 +78,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

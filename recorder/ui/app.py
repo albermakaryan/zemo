@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tkinter as tk
 
-from recorder import config
+from recorder import config, __version__
 from recorder.common import email_filename_part
 from recorder.recorders import WebcamRecorder, ScreenRecorder
 from recorder.audio import InternalAudioRecorder, is_loopback_available
@@ -19,16 +19,20 @@ from recorder.ui.panels import RecorderPanel
 class App(tk.Tk):
     """Main recorder application window."""
 
-    def __init__(self):
+    def __init__(self, auto_mux: bool = True):
         super().__init__()
-        self.title("Recorder")
+        self.title(f"Recorder v{__version__}")
         self.configure(bg=config.BG)
         self.resizable(False, False)
 
         config.ensure_recordings_dirs()
         self._recordings_base = config.get_recordings_dir()
         self._user_email = None
-        self._audio_recorder = None  # internal (system) audio; started with Record Both when available
+        self._audio_recorder = (
+            None  # internal (system) audio; started with Record Both when available
+        )
+        # When True, merge screen video + internal audio into recordings/screen_with_audio after Stop Both
+        self._auto_mux = bool(auto_mux)
         self._detector_enabled = tk.BooleanVar(value=False)
 
         self._build()
@@ -59,18 +63,34 @@ class App(tk.Tk):
         topbar.pack(fill="x", padx=24, pady=(20, 0))
 
         tk.Label(
-            topbar, text="● REC", font=("Courier New", 11, "bold"), bg=config.BG, fg=config.RED
+            topbar,
+            text="● REC",
+            font=("Courier New", 11, "bold"),
+            bg=config.BG,
+            fg=config.RED,
         ).pack(side="left")
         tk.Label(
-            topbar, text="  STUDIO", font=("Courier New", 11), bg=config.BG, fg=config.FG2
+            topbar,
+            text="  STUDIO",
+            font=("Courier New", 11),
+            bg=config.BG,
+            fg=config.FG2,
         ).pack(side="left")
 
         sans = config.sans_font()
         self._btn_both = tk.Button(
-            topbar, text="⏺  Record Both", font=sans,
-            bg=config.BG3, fg=config.FG, relief="flat", cursor="hand2",
-            activebackground=config.BORDER, activeforeground=config.FG,
-            padx=16, pady=8, command=self._record_both,
+            topbar,
+            text="⏺  Record Both",
+            font=sans,
+            bg=config.BG3,
+            fg=config.FG,
+            relief="flat",
+            cursor="hand2",
+            activebackground=config.BORDER,
+            activeforeground=config.FG,
+            padx=16,
+            pady=8,
+            command=self._record_both,
         )
         self._btn_both.pack(side="right")
 
@@ -91,47 +111,81 @@ class App(tk.Tk):
         bottom.pack(fill="x", padx=24, pady=(0, 16))
 
         self._btn_stop_both = tk.Button(
-            bottom, text="⏹  Stop Both", font=sans,
-            bg=config.BG3, fg=config.RED, relief="flat", cursor="hand2",
-            activebackground=config.BORDER, activeforeground=config.RED,
-            padx=16, pady=8, command=self._stop_both,
+            bottom,
+            text="⏹  Stop Both",
+            font=sans,
+            bg=config.BG3,
+            fg=config.RED,
+            relief="flat",
+            cursor="hand2",
+            activebackground=config.BORDER,
+            activeforeground=config.RED,
+            padx=16,
+            pady=8,
+            command=self._stop_both,
         )
         self._btn_stop_both.pack(side="left")
 
         self._detector_cb = tk.Checkbutton(
-            bottom, text="Run after Stop Both", font=config.MONO_SM,
-            variable=self._detector_enabled, bg=config.BG, fg=config.FG2,
-            selectcolor=config.BG3, activebackground=config.BG, activeforeground=config.FG2,
+            bottom,
+            text="Run after Stop Both",
+            font=config.MONO_SM,
+            variable=self._detector_enabled,
+            bg=config.BG,
+            fg=config.FG2,
+            selectcolor=config.BG3,
+            activebackground=config.BG,
+            activeforeground=config.FG2,
         )
         self._detector_cb.pack(side="left", padx=(16, 0))
 
         self._emotion_overlay = None  # EmotionOverlay when detection is on
         self._btn_realtime_detector = tk.Button(
-            bottom, text="▶  Start emotion detection", font=sans,
-            bg=config.BG3, fg=config.GREEN, relief="flat", cursor="hand2",
-            activebackground=config.BORDER, activeforeground=config.FG,
-            padx=12, pady=8, command=self._toggle_realtime_emotion_detection,
+            bottom,
+            text="▶  Start emotion detection",
+            font=sans,
+            bg=config.BG3,
+            fg=config.GREEN,
+            relief="flat",
+            cursor="hand2",
+            activebackground=config.BORDER,
+            activeforeground=config.FG,
+            padx=12,
+            pady=8,
+            command=self._toggle_realtime_emotion_detection,
         )
         self._btn_realtime_detector.pack(side="left", padx=(8, 0))
 
         self._email_lbl = tk.Label(
-            bottom, text="",
-            font=config.MONO_SM, bg=config.BG, fg=config.MUTED,
+            bottom,
+            text="",
+            font=config.MONO_SM,
+            bg=config.BG,
+            fg=config.MUTED,
         )
         self._email_lbl.pack(side="right", padx=(8, 0))
         self._audio_status_lbl = tk.Label(
-            bottom, text="",
-            font=config.MONO_SM, bg=config.BG, fg=config.MUTED,
+            bottom,
+            text="",
+            font=config.MONO_SM,
+            bg=config.BG,
+            fg=config.MUTED,
         )
         self._audio_status_lbl.pack(side="right", padx=(8, 0))
         self._detection_status_lbl = tk.Label(
-            bottom, text="",
-            font=config.MONO_SM, bg=config.BG, fg=config.MUTED,
+            bottom,
+            text="",
+            font=config.MONO_SM,
+            bg=config.BG,
+            fg=config.MUTED,
         )
         self._detection_status_lbl.pack(side="right", padx=(8, 0))
         tk.Label(
-            bottom, text="Press ⏹ Stop to save. Saves to recordings/webcam, screen & audio",
-            font=config.MONO_SM, bg=config.BG, fg=config.MUTED,
+            bottom,
+            text="Press ⏹ Stop to save. Saves to recordings/webcam, screen & audio",
+            font=config.MONO_SM,
+            bg=config.BG,
+            fg=config.MUTED,
         ).pack(side="right")
 
     def get_recording_email(self):
@@ -163,6 +217,7 @@ class App(tk.Tk):
         if getattr(self, "_emotion_overlay", None) is not None:
             try:
                 from detector.realtime import EmotionOverlay  # type: ignore
+
                 if isinstance(self._emotion_overlay, EmotionOverlay):
                     self._emotion_overlay.set_name_part(email_filename_part(email))
             except Exception:
@@ -189,6 +244,7 @@ class App(tk.Tk):
     def _on_audio_status(self, status: str, message: str):
         def _():
             self._audio_status_lbl.config(text=message[:40] if message else status)
+
         self.after(0, _)
 
     def _on_audio_done(self, filename: str):
@@ -203,6 +259,7 @@ class App(tk.Tk):
             from detector.realtime import EmotionOverlay
         except ImportError:
             from tkinter import messagebox
+
             messagebox.showerror(
                 "Emotion detection",
                 "Detector not available. Install: pip install deepface tf-keras",
@@ -210,8 +267,13 @@ class App(tk.Tk):
             return
 
         recorder = getattr(self._webcam_panel, "recorder", None)
-        if recorder is None or not getattr(recorder, "_thread", None) or not recorder._thread.is_alive():
+        if (
+            recorder is None
+            or not getattr(recorder, "_thread", None)
+            or not recorder._thread.is_alive()
+        ):
             from tkinter import messagebox
+
             messagebox.showwarning(
                 "Emotion detection",
                 "Webcam preview is not running. Start the webcam first.",
@@ -247,7 +309,9 @@ class App(tk.Tk):
             csv_path = self._emotion_overlay.csv_path
             self._emotion_overlay = None
             self._detection_status_lbl.config(
-                text=f"Saved: {csv_path}" if csv_path.exists() else "Emotion detection stopped",
+                text=f"Saved: {csv_path}"
+                if csv_path.exists()
+                else "Emotion detection stopped",
                 fg=config.GREEN if csv_path.exists() else config.MUTED,
             )
         self._btn_realtime_detector.config(
@@ -285,11 +349,14 @@ class App(tk.Tk):
                 output_video = str(out_dir / f"{stem}_annotated.mp4")
                 webcam_abs = str(w_path.resolve())
                 screen_abs = str(s_path.resolve())
-                self._detection_status_lbl.config(text="Detecting emotions…", fg=config.MUTED)
+                self._detection_status_lbl.config(
+                    text="Detecting emotions…", fg=config.MUTED
+                )
 
                 def run_detection():
                     try:
                         from detector import analyze_webcam_and_screen
+
                         analyze_webcam_and_screen(
                             webcam_path=webcam_abs,
                             screen_path=screen_abs,
@@ -300,17 +367,26 @@ class App(tk.Tk):
                         short_csv = Path(output_csv).name
                         short_vid = Path(output_video).name
                         msg = f"Saved: {out_dir}"
-                        self.after(0, lambda: self._detection_status_lbl.config(
-                            text=msg, fg=config.GREEN
-                        ))
+                        self.after(
+                            0,
+                            lambda: self._detection_status_lbl.config(
+                                text=msg, fg=config.GREEN
+                            ),
+                        )
                     except ImportError:
-                        self.after(0, lambda: self._detection_status_lbl.config(
-                            text="Detection: install deepface", fg=config.RED
-                        ))
+                        self.after(
+                            0,
+                            lambda: self._detection_status_lbl.config(
+                                text="Detection: install deepface", fg=config.RED
+                            ),
+                        )
                     except Exception as e:
-                        self.after(0, lambda: self._detection_status_lbl.config(
-                            text=f"Detection error: {str(e)[:40]}", fg=config.RED
-                        ))
+                        self.after(
+                            0,
+                            lambda: self._detection_status_lbl.config(
+                                text=f"Detection error: {str(e)[:40]}", fg=config.RED
+                            ),
+                        )
 
                 t = threading.Thread(target=run_detection, daemon=True)
                 t.start()
@@ -319,16 +395,46 @@ class App(tk.Tk):
                     text="Detection: no webcam/screen file", fg=config.MUTED
                 )
 
+        # Optionally mux screen video with internal audio into recordings/screen_with_audio.
+        # Uses the same CLI you can run manually:
+        #   python -m recorder.audio.mux_audio_into_video --screen-only <email>
+        if getattr(self, "_auto_mux", False):
+            email = getattr(self, "_user_email", None)
+            audio_rec = getattr(self, "_audio_recorder", None)
+            has_audio = bool(audio_rec and getattr(audio_rec, "filename", ""))
+            if email and has_audio:
+
+                def _run_mux_cli():
+                    try:
+                        cmd = [
+                            sys.executable,
+                            "-m",
+                            "recorder.audio.mux_audio_into_video",
+                            "--screen-only",
+                            email,
+                        ]
+                        subprocess.run(cmd, check=True)
+                    except Exception:
+                        # If auto-mux fails, user can still run the CLI manually.
+                        pass
+
+                t_mux = threading.Thread(target=_run_mux_cli, daemon=True)
+                t_mux.start()
+
     def _join_recorders_concurrent(self, timeout: float = 5.0):
         """Join webcam, screen, and audio recorder threads in parallel."""
         join_threads = []
         for panel in (self._webcam_panel, self._screen_panel):
             recorder = getattr(panel, "recorder", None)
             if recorder and getattr(recorder, "join", None):
-                t = threading.Thread(target=recorder.join, kwargs={"timeout": timeout}, daemon=True)
+                t = threading.Thread(
+                    target=recorder.join, kwargs={"timeout": timeout}, daemon=True
+                )
                 t.start()
                 join_threads.append(t)
-        if getattr(self, "_audio_recorder", None) and hasattr(self._audio_recorder, "join"):
+        if getattr(self, "_audio_recorder", None) and hasattr(
+            self._audio_recorder, "join"
+        ):
             t = threading.Thread(
                 target=self._audio_recorder.join,
                 kwargs={"timeout": timeout},

@@ -4,8 +4,10 @@ Records **internal (system) audio** — what is playing on the PC (e.g. online c
 
 ## Requirements
 
-- **Windows** (WASAPI loopback)
-- `pip install PyAudioWPatch`
+- **Windows**: WASAPI loopback — `pip install PyAudioWPatch` (or `pip install -e ".[windows]"`)
+- **Linux / macOS**: sounddevice (PulseAudio/PipeWire on Linux) — `pip install sounddevice` (or `pip install -e ".[linux]"`)
+
+Dispatch: Windows → internal_win; otherwise → internal_linux (Linux and macOS).
 
 ## Quick test (no app integration)
 
@@ -25,7 +27,7 @@ python -m recorder.audio.record_test
 from recorder.audio import InternalAudioRecorder, is_loopback_available
 
 if not is_loopback_available():
-    print("System audio capture not available (need Windows + PyAudioWPatch)")
+    print("System audio capture not available (Windows: PyAudioWPatch; Linux/macOS: sounddevice)")
 
 recorder = InternalAudioRecorder(on_status=..., on_done=...)
 recorder.start(save_dir="recordings/audio", email="user@example.com")
@@ -37,7 +39,7 @@ recorder.join()
 
 ## Sync with video (integrated in app)
 
-When you click **Record Both**, the app starts webcam, screen, and internal audio together (if PyAudioWPatch is available). All three use the same **Barrier(3)** and the same **stop_time**, so the WAV is aligned with the two videos. Outputs:
+When you click **Record Both**, the app starts webcam, screen, and internal audio together (when system audio is available on your platform). All three use the same **Barrier(3)** and the same **stop_time**, so the WAV is aligned with the two videos. Outputs:
 
 - `recordings/webcam/<email>_webcam.mp4`
 - `recordings/screen/<email>_screen.mp4`

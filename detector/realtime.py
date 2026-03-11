@@ -77,17 +77,29 @@ class EmotionOverlay:
         self._name_part = safe_name
         self._csv_path = self._save_dir / f"{safe_name}_emotion.csv"
 
-    def __call__(self, frame: np.ndarray, elapsed_s: float, is_recording: bool = False) -> None:
+    def __call__(
+        self, frame: np.ndarray, elapsed_s: float, is_recording: bool = False
+    ) -> None:
         """Draw overlay on frame; write CSV row only when a name is set and is_recording is True."""
         if self._frame_idx % self._sample_stride == 0:
             try:
                 self._last_result = self._model.analyze_frame(frame, time_s=elapsed_s)
                 if is_recording and self._csv_path is not None:
                     if self._file_handle is None:
-                        self._file_handle = self._csv_path.open("w", newline="", encoding="utf-8")
+                        self._file_handle = self._csv_path.open(
+                            "w", newline="", encoding="utf-8"
+                        )
                         self._writer = csv.writer(self._file_handle)
                         self._writer.writerow(
-                            ["time_s", "emotion", "emotion_pct", "face_x", "face_y", "face_w", "face_h"]
+                            [
+                                "time_s",
+                                "emotion",
+                                "emotion_pct",
+                                "face_x",
+                                "face_y",
+                                "face_w",
+                                "face_h",
+                            ]
                         )
                         self._file_handle.flush()
                     row = [

@@ -103,6 +103,7 @@ MONO_SM = ("Courier New", 9)
 
 def sans_font():
     import tkinter as tk
+
     return ("Segoe UI", 10) if getattr(tk, "TkVersion", None) else ("Helvetica", 10)
 
 
@@ -114,7 +115,7 @@ VIDEO_EXT = ".mp4"
 # Webcam uses the camera's native resolution (often 640x480 or 720p). Screen uses full monitor
 # resolution (e.g. 1920x1080), so screen recordings are usually larger. Set both below to force
 # the same output size for webcam and screen (frames are resized when writing).
-RECORDING_WIDTH = None   # e.g. 1920 to match screen; None = use source size
+RECORDING_WIDTH = None  # e.g. 1920 to match screen; None = use source size
 RECORDING_HEIGHT = None  # e.g. 1080; None = use source size
 # Default device indices: 0 = first/default camera, 1 = first/primary monitor (mss: 0=all, 1=primary)
 CAMERA_INDEX = 0

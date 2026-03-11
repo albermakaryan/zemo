@@ -28,7 +28,9 @@ class WebcamRecorder:
         self._thread = None
         self.recording = False
         self.filename = ""
-        self._pending_recording = None  # (save_dir, barrier, email) when user clicks Record
+        self._pending_recording = (
+            None  # (save_dir, barrier, email) when user clicks Record
+        )
         self._overlay_callback = None  # optional callback(frame, elapsed_s) — draws on frame in place for preview
 
     def set_overlay_callback(self, callback):
@@ -62,7 +64,9 @@ class WebcamRecorder:
         (save_path / ".gitkeep").touch(exist_ok=True)
         name_part = email_filename_part(email) if email else "user"
         self.filename = str(save_path / f"{name_part}_webcam{config.VIDEO_EXT}")
-        self._thread = threading.Thread(target=self._run, args=(False, save_dir, start_barrier, email), daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, args=(False, save_dir, start_barrier, email), daemon=True
+        )
         self._thread.start()
 
     def stop(self, stop_time=None):
@@ -94,7 +98,10 @@ class WebcamRecorder:
                 cap.release()
                 cap = None
         if cap is None or not cap.isOpened():
-            self.on_status("error", "No webcam found (tried indices 0–4). Check /dev/video* or camera permissions.")
+            self.on_status(
+                "error",
+                "No webcam found (tried indices 0–4). Check /dev/video* or camera permissions.",
+            )
             return
 
         src_w = make_even(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
@@ -136,7 +143,9 @@ class WebcamRecorder:
                     save_dir, barrier, email = self._pending_recording
                     self._pending_recording = None
                     for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                        out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
+                        out, ok = create_writer(
+                            self.filename, fourcc_str, config.FPS, w, h
+                        )
                         if ok:
                             break
                         if out:

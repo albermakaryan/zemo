@@ -21,6 +21,8 @@ from typing import Dict, List, Tuple, Any
 
 import cv2
 import numpy as np
+
+
 def get_actual_fps(cap: cv2.VideoCapture) -> Tuple[float, int, float]:
     """
     Measure actual FPS by reading frames and using stream duration.
@@ -51,9 +53,6 @@ def get_actual_fps(cap: cv2.VideoCapture) -> Tuple[float, int, float]:
         return 0.0, frame_count, 0.0
     actual_fps = frame_count / duration_sec
     return round(actual_fps, 2), frame_count, round(duration_sec, 3)
-  
-
-
 
 
 # Allow running from project root; add parent to path if needed
@@ -61,7 +60,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from recorder.config import RECORDINGS_DIR, WEBCAM_SUBDIR, SCREEN_SUBDIR, FPS as EXPECTED_FPS
+from recorder.config import (
+    RECORDINGS_DIR,
+    WEBCAM_SUBDIR,
+    SCREEN_SUBDIR,
+    FPS as EXPECTED_FPS,
+)
 
 
 def get_video_props(cap: cv2.VideoCapture) -> Dict[str, Any]:
@@ -151,12 +155,20 @@ def run_checks(filepath: Path, expected_fps: float = None) -> Dict[str, Any]:
         # Structural checks
         result["checks"]["has_frames"] = p["frame_count"] > 0 or measured_count > 0
         result["checks"]["has_resolution"] = p["width"] >= 2 and p["height"] >= 2
-        result["checks"]["even_dimensions"] = (p["width"] % 2 == 0) and (p["height"] % 2 == 0)
+        result["checks"]["even_dimensions"] = (p["width"] % 2 == 0) and (
+            p["height"] % 2 == 0
+        )
         result["checks"]["fps_reasonable"] = 0.1 < p["fps"] < 120
-        result["checks"]["fps_near_expected"] = abs(p["fps"] - expected_fps) < 2.0 if p["fps"] else False
-        result["checks"]["duration_positive"] = p["duration_sec"] > 0 or measured_duration > 0
+        result["checks"]["fps_near_expected"] = (
+            abs(p["fps"] - expected_fps) < 2.0 if p["fps"] else False
+        )
+        result["checks"]["duration_positive"] = (
+            p["duration_sec"] > 0 or measured_duration > 0
+        )
         if actual_fps > 0:
-            result["checks"]["actual_fps_near_expected"] = abs(actual_fps - expected_fps) < 2.0
+            result["checks"]["actual_fps_near_expected"] = (
+                abs(actual_fps - expected_fps) < 2.0
+            )
 
         # Sample frames for content quality
         samples = sample_frames(cap, num_samples=5)
@@ -166,8 +178,12 @@ def run_checks(filepath: Path, expected_fps: float = None) -> Dict[str, Any]:
             result["sample_frames"].append(stats)
             if stats.get("is_black"):
                 all_black_count += 1
-        result["checks"]["not_all_black"] = all_black_count < len(samples) if samples else False
-        result["checks"]["has_content"] = len(samples) > 0 and any(s.get("ok") for s in result["sample_frames"])
+        result["checks"]["not_all_black"] = (
+            all_black_count < len(samples) if samples else False
+        )
+        result["checks"]["has_content"] = len(samples) > 0 and any(
+            s.get("ok") for s in result["sample_frames"]
+        )
 
         # Overall ok: no error, basic checks pass
         result["ok"] = (
@@ -263,7 +279,9 @@ def print_report(report: Dict[str, Any]) -> None:
                     fps_str = f" @ {p['fps']:.1f} fps (metadata)"
                     if actual is not None and actual > 0:
                         fps_str += f", {actual:.2f} fps (actual)"
-                    print(f"       {p['width']}x{p['height']}{fps_str}, {p.get('measured_frame_count', p['frame_count'])} frames, {p.get('measured_duration_sec', p['duration_sec']):.2f}s")
+                    print(
+                        f"       {p['width']}x{p['height']}{fps_str}, {p.get('measured_frame_count', p['frame_count'])} frames, {p.get('measured_duration_sec', p['duration_sec']):.2f}s"
+                    )
                 if not v["ok"] and v.get("checks"):
                     fails = [k for k, val in v["checks"].items() if val is False]
                     if fails:
@@ -290,7 +308,9 @@ def print_report(report: Dict[str, Any]) -> None:
                     fps_str = f" @ {p['fps']:.1f} fps (metadata)"
                     if actual is not None and actual > 0:
                         fps_str += f", {actual:.2f} fps (actual)"
-                    print(f"       {p['width']}x{p['height']}{fps_str}, {p.get('measured_frame_count', p['frame_count'])} frames, {p.get('measured_duration_sec', p['duration_sec']):.2f}s")
+                    print(
+                        f"       {p['width']}x{p['height']}{fps_str}, {p.get('measured_frame_count', p['frame_count'])} frames, {p.get('measured_duration_sec', p['duration_sec']):.2f}s"
+                    )
                 if not v["ok"] and v.get("checks"):
                     fails = [k for k, val in v["checks"].items() if val is False]
                     if fails:
@@ -317,9 +337,13 @@ def main():
         default=None,
         help="Path to recordings folder (same as positional)",
     )
-    parser.add_argument("--json", action="store_true", help="Output full report as JSON")
+    parser.add_argument(
+        "--json", action="store_true", help="Output full report as JSON"
+    )
     args = parser.parse_args()
-    recordings_dir = Path(args.recordings_dir_opt or args.recordings_dir or RECORDINGS_DIR)
+    recordings_dir = Path(
+        args.recordings_dir_opt or args.recordings_dir or RECORDINGS_DIR
+    )
     if not recordings_dir.exists():
         print(f"Error: directory does not exist: {recordings_dir}", file=sys.stderr)
         sys.exit(1)
@@ -332,9 +356,11 @@ def main():
     if report.get("flat"):
         failed = s["videos_total"] > 0 and s["videos_ok"] == 0
     else:
-        failed = (s["webcam_total"] > 0 and s["webcam_ok"] == 0) or (s["screen_total"] > 0 and s["screen_ok"] == 0)
+        failed = (s["webcam_total"] > 0 and s["webcam_ok"] == 0) or (
+            s["screen_total"] > 0 and s["screen_ok"] == 0
+        )
     sys.exit(1 if failed else 0)
 
-    
+
 if __name__ == "__main__":
     main()

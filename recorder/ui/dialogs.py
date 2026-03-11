@@ -20,10 +20,20 @@ def ask_university_email(parent: tk.Tk) -> Optional[str]:
     d.grab_set()
 
     tk.Label(
-        d, text="Enter your University email address",
-        font=config.sans_font(), bg=config.BG2, fg=config.FG,
+        d,
+        text="Enter your University email address",
+        font=config.sans_font(),
+        bg=config.BG2,
+        fg=config.FG,
     ).pack(pady=(16, 8), padx=20, anchor="w")
-    entry = tk.Entry(d, font=config.sans_font(), width=40, bg=config.BG3, fg=config.FG, insertbackground=config.FG)
+    entry = tk.Entry(
+        d,
+        font=config.sans_font(),
+        width=40,
+        bg=config.BG3,
+        fg=config.FG,
+        insertbackground=config.FG,
+    )
     entry.pack(pady=(0, 16), padx=20, fill="x", ipady=6)
     entry.focus_set()
 
@@ -32,7 +42,9 @@ def ask_university_email(parent: tk.Tk) -> Optional[str]:
         if "@" in s and "." in s and len(s) > 5:
             result[0] = s
             return True
-        messagebox.showwarning("Invalid email", "Please enter a valid university email address.", parent=d)
+        messagebox.showwarning(
+            "Invalid email", "Please enter a valid university email address.", parent=d
+        )
         return False
 
     def _ok():
@@ -45,12 +57,28 @@ def ask_university_email(parent: tk.Tk) -> Optional[str]:
     btn_frame = tk.Frame(d, bg=config.BG2)
     btn_frame.pack(pady=(0, 16))
     tk.Button(
-        btn_frame, text="OK", font=config.sans_font(), bg=config.BG3, fg=config.FG,
-        relief="flat", cursor="hand2", padx=16, pady=6, command=_ok,
+        btn_frame,
+        text="OK",
+        font=config.sans_font(),
+        bg=config.BG3,
+        fg=config.FG,
+        relief="flat",
+        cursor="hand2",
+        padx=16,
+        pady=6,
+        command=_ok,
     ).pack(side="left", padx=4)
     tk.Button(
-        btn_frame, text="Cancel", font=config.sans_font(), bg=config.BG3, fg=config.FG2,
-        relief="flat", cursor="hand2", padx=16, pady=6, command=_cancel,
+        btn_frame,
+        text="Cancel",
+        font=config.sans_font(),
+        bg=config.BG3,
+        fg=config.FG2,
+        relief="flat",
+        cursor="hand2",
+        padx=16,
+        pady=6,
+        command=_cancel,
     ).pack(side="left", padx=4)
 
     entry.bind("<Return>", lambda e: _ok())

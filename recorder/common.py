@@ -24,7 +24,10 @@ def open_webcam(
     if preferred_index is None:
         preferred_index = getattr(config, "CAMERA_INDEX", 0)
     if fallback_indices is None:
-        fallback_indices = [0, 1]  # avoid index 2 when only 2 devices exist (nb_devices=2)
+        fallback_indices = [
+            0,
+            1,
+        ]  # avoid index 2 when only 2 devices exist (nb_devices=2)
     indices = [preferred_index] + [i for i in fallback_indices if i != preferred_index]
 
     for idx in indices:
@@ -88,6 +91,7 @@ def resize_frame(frame, w: int, h: int):
 
 def frame_to_tk(frame):
     from PIL import Image, ImageTk
+
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     img = Image.fromarray(rgb)
     return ImageTk.PhotoImage(img)

@@ -32,11 +32,13 @@ def _dxcam_module():
         return None
     try:
         import dxcam_cpp as dxcam
+
         _dxcam = dxcam
         return _dxcam
     except ImportError:
         try:
             import dxcam
+
             _dxcam = dxcam
             return _dxcam
         except ImportError:
@@ -48,6 +50,7 @@ class ScreenRecorder:
     Screen recording via dxcam (Windows) or mss. One frame per time slot so
     playback matches real time. Uses same API as drafts/dxcam_recorder.py.
     """
+
     def __init__(self, on_frame, on_status, on_done):
         self.on_frame = on_frame
         self.on_status = on_status
@@ -180,6 +183,7 @@ class ScreenRecorder:
     def _run_mss(self, save_dir):
         """Fallback when dxcam not available."""
         import mss
+
         with mss.mss() as sct:
             monitor = sct.monitors[config.MONITOR_INDEX]
             w = make_even(monitor["width"])
@@ -222,7 +226,9 @@ class ScreenRecorder:
                             frame_count += 1
                             next_write_time += frame_interval
                             last_bgr = frame
-                            preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
+                            preview = resize_frame(
+                                frame, config.PREVIEW_W, config.PREVIEW_H
+                            )
                             self.on_frame(preview, time.time() - t0)
                         except Exception:
                             if last_bgr is not None:

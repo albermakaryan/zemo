@@ -37,7 +37,13 @@ def main():
     if n == 0:
         print("No frames to show.")
         sys.exit(1)
-    print("Frames:", n, "| Duration: {:.1f}s | Press Q to quit, SPACE to pause".format(synced.duration_sec))
+    print(
+        "Frames:",
+        n,
+        "| Duration: {:.1f}s | Press Q to quit, SPACE to pause".format(
+            synced.duration_sec
+        ),
+    )
 
     win = "Merged: Webcam | Screen (aligned)"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -55,21 +61,46 @@ def main():
         if webcam is not None:
             r = h / webcam.shape[0]
             webcam = cv2.resize(webcam, (int(webcam.shape[1] * r), h))
-            cv2.putText(webcam, "Webcam", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(
+                webcam, "Webcam", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2
+            )
         else:
             webcam = np.zeros((h, 320, 3), dtype=np.uint8)
-            cv2.putText(webcam, "No webcam", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(
+                webcam,
+                "No webcam",
+                (8, 24),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+            )
         if screen is not None:
             r = h / screen.shape[0]
             screen = cv2.resize(screen, (int(screen.shape[1] * r), h))
-            cv2.putText(screen, "Screen", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(
+                screen, "Screen", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2
+            )
         else:
             screen = np.zeros((h, 320, 3), dtype=np.uint8)
-            cv2.putText(screen, "No screen", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(
+                screen,
+                "No screen",
+                (8, 24),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+            )
         combined = np.hstack([webcam, screen])
         cv2.putText(
-            combined, "Frame {} / {}  (t={:.2f}s)".format(i, n, i / synced.fps),
-            (8, h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2
+            combined,
+            "Frame {} / {}  (t={:.2f}s)".format(i, n, i / synced.fps),
+            (8, h - 12),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
         )
         cv2.imshow(win, combined)
         key = cv2.waitKey(frame_ms if not paused else 0)
