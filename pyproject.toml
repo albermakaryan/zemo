@@ -14,6 +14,7 @@ dependencies = [
     "keyboard==0.13.5",
     "deepface>=0.0.79",
     "tf-keras>=2.20.1",
+    "sounddevice>=0.5.5",
 ]
 
 [project.optional-dependencies]

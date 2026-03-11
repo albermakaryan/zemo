@@ -53,34 +53,8 @@ def _check_deps():
     sys.exit(1)
 
 
-def _setup_linux_audio():
-    """On Linux, use linux_internal.py for system audio (Pulse/PipeWire). Must run before any import of recorder.audio."""
-    if sys.platform != "linux":
-        return
-    from pathlib import Path
-    root = str(Path(__file__).resolve().parent)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    try:
-        import linux_internal as linux_audio
-    except ImportError as e:
-        # sounddevice not installed or linux_internal not found; system audio will show "(no system audio)"
-        import os
-        if os.environ.get("ZEMO_DEBUG_AUDIO"):
-            print("Linux audio: could not load linux_internal:", e, "\nInstall: pip install -e \".[linux]\"")
-        return
-    # Patch internal module and the recorder.audio package (app imports from the package).
-    import recorder.audio.internal as internal
-    internal.is_loopback_available = linux_audio.is_loopback_available
-    internal.InternalAudioRecorder = linux_audio.InternalAudioRecorder
-    import recorder.audio as audio_pkg
-    audio_pkg.is_loopback_available = linux_audio.is_loopback_available
-    audio_pkg.InternalAudioRecorder = linux_audio.InternalAudioRecorder
-
-
 def main():
     _check_deps()
-    _setup_linux_audio()
     from recorder.ui import App
     app = App()
     app.protocol("WM_DELETE_WINDOW", app.on_close)

@@ -1,8 +1,7 @@
 """
-Internal (system) audio recording on Linux: capture what is playing (default output monitor).
+Internal (system) audio on Windows: capture what is playing on the PC.
 
-Uses PulseAudio/PipeWire monitor source via sounddevice (PortAudio).
-Requires: pip install sounddevice  (or: pip install -e ".[linux]")
+Uses WASAPI loopback via PyAudioWPatch. Requires: pip install PyAudioWPatch
 """
 
 import sys
@@ -10,69 +9,60 @@ import threading
 import time
 import wave
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from recorder import config
 from recorder.common import email_filename_part
 
 try:
-    import sounddevice as sd
-    import numpy as np
-    _HAS_SOUNDDEVICE = True
+    import pyaudiowpatch as pyaudio
+    _HAS_PYAUDIOWPATCH = True
 except ImportError:
-    sd = None
-    np = None
-    _HAS_SOUNDDEVICE = False
+    pyaudio = None
+    _HAS_PYAUDIOWPATCH = False
 
 
 def is_loopback_available() -> bool:
-    """True if we can record system audio (Linux + sounddevice + a monitor source)."""
-    if not _HAS_SOUNDDEVICE or sys.platform != "linux":
+    """True if we can record system audio (Windows + PyAudioWPatch + WASAPI loopback)."""
+    if not _HAS_PYAUDIOWPATCH or sys.platform != "win32":
         return False
     try:
-        return _get_monitor_device_index() is not None
+        with pyaudio.PyAudio() as p:
+            p.get_host_api_info_by_type(pyaudio.paWASAPI)
+        return True
     except Exception:
         return False
 
 
-def _get_monitor_device_index() -> Optional[int]:
-    """Return the device index of the default output's monitor (loopback), or None."""
-    if not _HAS_SOUNDDEVICE:
-        return None
+def _get_loopback_device(p: "pyaudio.PyAudio") -> Optional[Dict[str, Any]]:
+    """Get the default WASAPI output device in loopback mode, or None."""
     try:
-        default_sink_name = None
-        try:
-            default_out = sd.query_devices(kind="output")
-            if default_out and isinstance(default_out, dict):
-                default_sink_name = default_out.get("name", "")
-        except Exception:
-            pass
-        first_monitor = None
-        # sounddevice: query_devices(i) returns device at index i; iterate indices until no more devices
-        for i in range(256):
-            try:
-                dev = sd.query_devices(i)
-            except Exception:
-                break
-            if dev is None or not isinstance(dev, dict):
-                break
-            if dev.get("max_input_channels", 0) < 1:
-                continue
-            name = (dev.get("name") or "").strip()
-            if "Monitor" in name or "monitor" in name:
-                if default_sink_name and default_sink_name in name:
-                    return i
-                if first_monitor is None:
-                    first_monitor = i
-        return first_monitor
-    except Exception:
+        wasapi_info = p.get_host_api_info_by_type(pyaudio.paWASAPI)
+    except OSError:
         return None
+    default_speakers = p.get_device_info_by_index(wasapi_info["defaultOutputDevice"])
+    if default_speakers.get("isLoopbackDevice"):
+        return default_speakers
+    for loopback in p.get_loopback_device_info_generator():
+        if default_speakers["name"] in loopback["name"]:
+            return loopback
+    return None
 
 
 class InternalAudioRecorder:
-    """Record internal (system) audio on Linux via PulseAudio/PipeWire monitor."""
+    """
+    Record internal (system) audio via WASAPI loopback on Windows.
 
-    def __init__(self, on_status: Optional[Callable[[str, str], None]] = None, on_done: Optional[Callable[[str], None]] = None):
+    Use case: capture audio from an online course playing in the browser
+    while screen and webcam are recorded. Start/stop with the same barrier
+    and stop_time as video so the WAV aligns with the video duration.
+    """
+
+    def __init__(
+        self,
+        on_status: Optional[Callable[[str, str], None]] = None,
+        on_done: Optional[Callable[[str], None]] = None,
+    ):
         self.on_status = on_status or (lambda _s, _m: None)
         self.on_done = on_done or (lambda _f: None)
         self._stop = threading.Event()
@@ -90,15 +80,11 @@ class InternalAudioRecorder:
         start_time_ref: Optional[List[Optional[float]]] = None,
         email: Optional[str] = None,
     ) -> None:
-        if not _HAS_SOUNDDEVICE:
-            self.on_status("error", "System audio requires: pip install sounddevice")
+        if not _HAS_PYAUDIOWPATCH:
+            self.on_status("error", "Internal audio requires PyAudioWPatch on Windows")
             return
-        if sys.platform != "linux":
-            self.on_status("error", "This implementation is for Linux only")
-            return
-        dev_idx = _get_monitor_device_index()
-        if dev_idx is None:
-            self.on_status("error", "No PulseAudio/PipeWire monitor source found")
+        if sys.platform != "win32":
+            self.on_status("error", "Internal audio is Windows-only (WASAPI loopback)")
             return
         self._stop.clear()
         self._stop_time = None
@@ -109,7 +95,7 @@ class InternalAudioRecorder:
         save_path.mkdir(parents=True, exist_ok=True)
         name_part = email_filename_part(email) if email else "user"
         self.filename = str(save_path / f"{name_part}_audio{config.AUDIO_EXT}")
-        self._thread = threading.Thread(target=self._run, args=(dev_idx,), daemon=True)
+        self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def stop(self, stop_time: Optional[float] = None) -> None:
@@ -121,56 +107,66 @@ class InternalAudioRecorder:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
 
-    def _run(self, device_index: int) -> None:
+    def _run(self) -> None:
+        # (timestamp, bytes) so we can place each chunk at the correct time; silence = no chunk
         chunks: List[Tuple[float, bytes]] = []
         t0: Optional[float] = None
         sample_rate = config.AUDIO_SAMPLE_RATE
         nchannels = 2
-        sampwidth = 2
-        blocksize = config.AUDIO_CHUNK_SIZE
+        sampwidth = 2  # 16-bit
 
         try:
-            dev = sd.query_devices(device_index)
-            sr = int(dev.get("default_samplerate", sample_rate))
-            ch = min(int(dev.get("max_input_channels", 2)), 2)
-            sample_rate = sr
-            nchannels = ch
-            self.on_status("recording", f"→ {Path(self.filename).name} (system audio)")
-
-            if self._start_barrier is not None:
-                self._start_barrier.wait()
-            ref = self._start_time_ref
-            video_t0 = ref[0] if ref and len(ref) and ref[0] is not None else None
-
-            def stream_callback(indata, frames, time_info, status):
-                if status:
+            with pyaudio.PyAudio() as p:
+                device = _get_loopback_device(p)
+                if not device:
+                    self.on_status("error", "No WASAPI loopback device found")
+                    self.recording = False
                     return
-                if not self._stop.is_set() and indata is not None and indata.size:
-                    data = (indata * 32767).astype(np.int16).tobytes()
-                    chunks.append((time.time(), data))
+                sample_rate = int(device["defaultSampleRate"])
+                nchannels = int(device["maxInputChannels"])
+                self.on_status("recording", f"→ {Path(self.filename).name} (system audio)")
 
-            with sd.InputStream(
-                device=device_index,
-                channels=nchannels,
-                samplerate=sample_rate,
-                blocksize=blocksize,
-                dtype="float32",
-                callback=stream_callback,
-            ):
+                if self._start_barrier is not None:
+                    self._start_barrier.wait()
+                self._stream_started = False
+
+                def callback(in_data: bytes, frame_count: int, time_info: dict, status: int) -> tuple:
+                    if self._stream_started and not self._stop.is_set():
+                        # Wall-clock time so (ts - t0) gives correct offset; time_info values can be 0 or wrong
+                        chunks.append((time.time(), in_data))
+                    return (in_data, pyaudio.paContinue)
+
+                stream = p.open(
+                    format=pyaudio.paInt16,
+                    channels=nchannels,
+                    rate=sample_rate,
+                    frames_per_buffer=config.AUDIO_CHUNK_SIZE,
+                    input=True,
+                    input_device_index=device["index"],
+                    stream_callback=callback,
+                )
+                stream.start_stream()
                 t0 = time.time()
-                self._video_t0 = video_t0 if video_t0 is not None else t0
-                while not self._stop.is_set():
-                    time.sleep(0.05)
+                self._stream_started = True
+                ref = getattr(self, "_start_time_ref", None)
+                video_t0 = (ref[0] if ref and len(ref) and ref[0] is not None else t0)
+                self._video_t0 = video_t0
+                try:
+                    while not self._stop.is_set():
+                        time.sleep(0.05)
+                finally:
+                    stream.stop_stream()
+                    stream.close()
 
         except Exception as e:
             self.on_status("error", str(e))
             self.recording = False
-            self.on_done(self.filename)
             return
 
+        # Place each chunk at its timestamp so silence stays in the right place; then prepend/pad for video sync
         try:
-            t_final = self._stop_time or time.time()
-            t0_val = t0 or time.time()
+            t_final = getattr(self, "_stop_time", None) or time.time()
+            t0_val = t0 if t0 is not None else time.time()
             video_t0_val = getattr(self, "_video_t0", t0_val)
             start_offset = max(0.0, t0_val - video_t0_val)
             elapsed_audio = t_final - t0_val
@@ -179,6 +175,7 @@ class InternalAudioRecorder:
             offset_frames = int(start_offset * sample_rate)
             total_frames_video = int((t_final - video_t0_val) * sample_rate)
 
+            # Full timeline from t0 to t_final: zeros (silence) everywhere; place each chunk at (ts - t0)
             body_len = expected_body_frames * bytes_per_frame
             audio_body = bytearray(body_len)
             for ts, data in sorted(chunks, key=lambda x: x[0]):
@@ -196,6 +193,7 @@ class InternalAudioRecorder:
                 start_byte = frame_start * bytes_per_frame
                 audio_body[start_byte : start_byte + copy_len] = data[:copy_len]
 
+            # If no chunks were placed (e.g. no data from device), body is all zeros — that's valid
             silence_pre = b"\x00" * (offset_frames * bytes_per_frame)
             data_to_write = silence_pre + bytes(audio_body)
             frames_so_far = offset_frames + expected_body_frames

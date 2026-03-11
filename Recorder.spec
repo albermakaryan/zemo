@@ -22,6 +22,8 @@ a = Analysis(
         'recorder.ui.dialogs',
         'recorder.audio',
         'recorder.audio.internal',
+        'recorder.audio.internal_win',
+        'recorder.audio.internal_linux',
         'pyaudiowpatch',
         'cv2',
         'numpy',
