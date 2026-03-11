@@ -56,9 +56,13 @@ def _check_deps():
 
 def main():
     _check_deps()
+    # Auto-mux screen video with internal audio after "Stop Both"
+    # Can be disabled with CLI flag: --no-auto-mux
+    auto_mux = "--no-auto-mux" not in sys.argv
+
     from recorder.ui import App
 
-    app = App()
+    app = App(auto_mux=auto_mux)
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     try:
         app.mainloop()

@@ -8,11 +8,11 @@ Run from project root:
 If no email, uses the latest recording. Requires ffmpeg on PATH.
 
 Output (default):
-  recordings/screen/<email>_screen_with_audio.mp4
+  recordings/screen_with_audio/<email>_screen_with_audio.mp4
   recordings/webcam/<email>_webcam_with_audio.mp4
 
 Output (--screen-only):
-  recordings/screen/<email>_screen_with_audio.mp4
+  recordings/screen_with_audio/<email>_screen_with_audio.mp4
 """
 
 import subprocess
@@ -124,10 +124,11 @@ def main():
     webcam_dir = get_webcam_dir()
     screen_dir = get_screen_dir()
     audio_dir = get_audio_dir()
+    screen_with_audio_dir = RECORDINGS_DIR / "screen_with_audio"
 
     video_screen = screen_dir / "{}_screen.mp4".format(email)
     audio_wav = audio_dir / "{}_audio.wav".format(email)
-    out_screen = screen_dir / "{}_screen_with_audio.mp4".format(email)
+    out_screen = screen_with_audio_dir / "{}_screen_with_audio.mp4".format(email)
 
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:

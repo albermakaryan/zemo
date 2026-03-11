@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tkinter as tk
 
-from recorder import config
+from recorder import config, __version__
 from recorder.common import email_filename_part
 from recorder.recorders import WebcamRecorder, ScreenRecorder
 from recorder.audio import InternalAudioRecorder, is_loopback_available
@@ -19,9 +19,9 @@ from recorder.ui.panels import RecorderPanel
 class App(tk.Tk):
     """Main recorder application window."""
 
-    def __init__(self):
+    def __init__(self, auto_mux: bool = True):
         super().__init__()
-        self.title("Recorder")
+        self.title(f"Recorder v{__version__}")
         self.configure(bg=config.BG)
         self.resizable(False, False)
 
@@ -31,6 +31,8 @@ class App(tk.Tk):
         self._audio_recorder = (
             None  # internal (system) audio; started with Record Both when available
         )
+        # When True, merge screen video + internal audio into recordings/screen_with_audio after Stop Both
+        self._auto_mux = bool(auto_mux)
         self._detector_enabled = tk.BooleanVar(value=False)
 
         self._build()
@@ -392,6 +394,31 @@ class App(tk.Tk):
                 self._detection_status_lbl.config(
                     text="Detection: no webcam/screen file", fg=config.MUTED
                 )
+
+        # Optionally mux screen video with internal audio into recordings/screen_with_audio.
+        # Uses the same CLI you can run manually:
+        #   python -m recorder.audio.mux_audio_into_video --screen-only <email>
+        if getattr(self, "_auto_mux", False):
+            email = getattr(self, "_user_email", None)
+            audio_rec = getattr(self, "_audio_recorder", None)
+            has_audio = bool(audio_rec and getattr(audio_rec, "filename", ""))
+            if email and has_audio:
+                def _run_mux_cli():
+                    try:
+                        cmd = [
+                            sys.executable,
+                            "-m",
+                            "recorder.audio.mux_audio_into_video",
+                            "--screen-only",
+                            email,
+                        ]
+                        subprocess.run(cmd, check=True)
+                    except Exception:
+                        # If auto-mux fails, user can still run the CLI manually.
+                        pass
+
+                t_mux = threading.Thread(target=_run_mux_cli, daemon=True)
+                t_mux.start()
 
     def _join_recorders_concurrent(self, timeout: float = 5.0):
         """Join webcam, screen, and audio recorder threads in parallel."""
