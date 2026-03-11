@@ -16,6 +16,7 @@ dependencies = [
     "tf-keras>=2.20.1",
     "sounddevice>=0.5.5",
     "pyaudiowpatch>=0.2.12.8",
+    "pre-commit>=4.5.1",
 ]
 
 [project.optional-dependencies]

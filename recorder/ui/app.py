@@ -403,6 +403,7 @@ class App(tk.Tk):
             audio_rec = getattr(self, "_audio_recorder", None)
             has_audio = bool(audio_rec and getattr(audio_rec, "filename", ""))
             if email and has_audio:
+
                 def _run_mux_cli():
                     try:
                         cmd = [
