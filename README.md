@@ -1,6 +1,6 @@
 # Screen & Webcam Recorder
 
-Desktop app to record screen and/or webcam as MP4, with a floating movable start/stop button and optional countdown. Includes an in-preview emotion detection overlay and per-recording emotion CSV export.
+Desktop app to record screen and/or webcam as MP4, with a floating movable start/stop button and optional countdown.
 
 ## Features
 
@@ -10,7 +10,6 @@ Desktop app to record screen and/or webcam as MP4, with a floating movable start
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
 - **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, and `recordings/audio/`
-- **Emotion detection** overlay on webcam preview (independent toggle button); CSV saved **only while recording is running** to `recordings/detection/<email>_emotion.csv`
 
 ## Requirements
 
@@ -92,29 +91,13 @@ zemo/
 ├── recorder/            # Package
 │   ├── __init__.py
 │   ├── config.py        # Paths, constants, theme
-│   ├── ui/              # App, panels, float button, detection toggle
+│   ├── ui/              # App, panels, float button
 │   ├── audio/           # Internal (system) audio recorder (Windows + Linux backends)
 │   └── screen_recorder.py, webcam_recorder.py, ...
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
     ├── screen/          # Screen MP4s
     └── audio/           # System audio WAVs (when available)
-```
-
-## Testing emotion detection results
-
-After recording with emotion detection on, the CSV is at `recordings/detection/<email>_emotion.csv`. To view a summary (row count, time range, emotion distribution, sample rows):
-
-```bash
-python scripts/view_emotion_csv.py recordings/detection/makaryanalber@gmail.com_emotion.csv
-# or, to use the latest CSV in that folder:
-python scripts/view_emotion_csv.py
-```
-
-To run full pipeline emotion analysis on existing webcam + screen videos (writes a new CSV and annotated video):
-
-```bash
-python analyze_recording.py --webcam recordings/webcam/<email>_webcam.mp4 --screen recordings/screen/<email>_screen.mp4
 ```
 
 ## Test audio only (no full app)

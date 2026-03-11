@@ -12,11 +12,9 @@ dependencies = [
     "imageio-ffmpeg>=0.4.9",
     "pyautogui==0.9.54",
     "keyboard==0.13.5",
-    "deepface>=0.0.79",
-    "tf-keras>=2.20.1",
-    "sounddevice>=0.5.5",
     "pyaudiowpatch>=0.2.12.8",
     "pre-commit>=4.5.1",
+    "pip>=26.0.1",
 ]
 
 [project.optional-dependencies]
