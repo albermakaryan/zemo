@@ -38,6 +38,7 @@ a = Analysis(
         'PIL._tkinter_finder',
         'PIL.Image',
         'PIL.ImageTk',
+        'imageio_ffmpeg',
     ],
     hookspath=[],
     hooksconfig={},

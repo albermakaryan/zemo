@@ -81,7 +81,7 @@ def ensure_recordings_dirs() -> None:
     """Create recordings base and subfolders if they don't exist."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     (RECORDINGS_DIR / ".gitkeep").touch(exist_ok=True)
-    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR, DETECTION_SUBDIR):
+    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR):
         subdir = RECORDINGS_DIR / sub
         subdir.mkdir(parents=True, exist_ok=True)
         (subdir / ".gitkeep").touch(exist_ok=True)
