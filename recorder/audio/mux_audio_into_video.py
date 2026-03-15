@@ -4,6 +4,7 @@ Add audio to video: mux the recorded WAV into the screen (or webcam) MP4 using f
 Run from project root:
   python -m recorder.audio.mux_audio_into_video [email]           # screen + webcam with audio
   python -m recorder.audio.mux_audio_into_video --screen-only [email]   # only screen with audio
+  python -m recorder.audio.mux_audio_into_video --screen-only --recordings-dir dist/recordings [email]
 
 If no email, uses the latest recording. Requires ffmpeg on PATH.
 
@@ -94,9 +95,9 @@ def mux_one(
         return False
 
 
-def _latest_email() -> str:
+def _latest_email(recordings_dir: Path) -> str:
     """Base name from newest recordings/webcam/*_webcam.mp4."""
-    webcam_dir = RECORDINGS_DIR / "webcam"
+    webcam_dir = recordings_dir / "webcam"
     if not webcam_dir.exists():
         return ""
     candidates = list(webcam_dir.glob("*_webcam.mp4"))
@@ -111,20 +112,31 @@ def main():
     screen_only = "--screen-only" in args
     if screen_only:
         args = [a for a in args if a != "--screen-only"]
+
+    recordings_dir = RECORDINGS_DIR
+    if "--recordings-dir" in args:
+        idx = args.index("--recordings-dir")
+        args.pop(idx)
+        if idx < len(args):
+            recordings_dir = Path(args.pop(idx)).resolve()
+        else:
+            print("Usage: --recordings-dir requires a path (e.g. dist/recordings)")
+            return 1
+
     email = (args[0] if args else "").strip()
     if not email:
-        email = _latest_email()
+        email = _latest_email(recordings_dir)
     if not email:
         print(
-            "Usage: python -m recorder.audio.mux_audio_into_video [--screen-only] [email]"
+            "Usage: python -m recorder.audio.mux_audio_into_video [--screen-only] [--recordings-dir DIR] [email]"
         )
         print("  Adds audio to screen video (and optionally webcam). Needs ffmpeg.")
         return 1
 
-    webcam_dir = get_webcam_dir()
-    screen_dir = get_screen_dir()
-    audio_dir = get_audio_dir()
-    screen_with_audio_dir = RECORDINGS_DIR / "screen_with_audio"
+    webcam_dir = recordings_dir / "webcam"
+    screen_dir = recordings_dir / "screen"
+    audio_dir = recordings_dir / "audio"
+    screen_with_audio_dir = recordings_dir / "screen_with_audio"
 
     video_screen = screen_dir / "{}_screen.mp4".format(email)
     audio_wav = audio_dir / "{}_audio.wav".format(email)
