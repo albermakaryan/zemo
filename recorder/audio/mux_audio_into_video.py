@@ -18,18 +18,14 @@ Output (--screen-only):
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 _root = Path(__file__).resolve().parent.parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-from recorder.config import (
-    get_webcam_dir,
-    get_screen_dir,
-    get_audio_dir,
-    RECORDINGS_DIR,
-)
+from recorder.config import RECORDINGS_DIR
 
 
 def _get_ffmpeg_exe():
@@ -47,11 +43,36 @@ def _get_ffmpeg_exe():
         return None
 
 
+def _is_video_valid(video_path: Path, ffmpeg_exe: str) -> bool:
+    """
+    Quick sanity check that the MP4 has a valid container (moov atom etc.)
+    before trying to mux. Uses ffmpeg itself to probe.
+    """
+    cmd = [
+        ffmpeg_exe,
+        "-v",
+        "error",
+        "-i",
+        str(video_path),
+        "-f",
+        "null",
+        "-",
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        err = (e.stderr or str(e)) if e.stderr is not None else str(e)
+        print(f"  Invalid video file {video_path.name}:")
+        print(err)
+        return False
+
+
 def mux_one(
     video_path: Path, audio_path: Path, out_path: Path, ffmpeg_exe: str
 ) -> bool:
     if not video_path.exists():
-        print("  Skip (no video): {}".format(video_path.name))
+        print("  Skip (no video file): {}".format(video_path.name))
         return False
     if not audio_path.exists():
         print("  Skip (no audio): {}".format(audio_path.name))
@@ -60,6 +81,9 @@ def mux_one(
         print(
             "  FAIL: ffmpeg not found. Install ffmpeg (or: pip install imageio-ffmpeg)"
         )
+        return False
+    if not _is_video_valid(video_path, ffmpeg_exe):
+        # Don't attempt muxing with a corrupted/incomplete MP4.
         return False
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
@@ -86,12 +110,17 @@ def mux_one(
         str(out_path),
     ]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Show full ffmpeg output so failures are easy to debug.
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        if result.stderr:
+            # ffmpeg prints a lot to stderr even on success; keep it visible for troubleshooting.
+            print(result.stderr)
         print("  OK: {}".format(out_path.name))
         return True
     except subprocess.CalledProcessError as e:
         err = (e.stderr or str(e)) if e.stderr is not None else str(e)
-        print("  FAIL: {} - {}".format(out_path.name, err[:200]))
+        print("  FAIL: {} -".format(out_path.name))
+        print(err)
         return False
 
 
@@ -154,6 +183,10 @@ def main():
     if not audio_wav.exists():
         print("  Audio file not found. Exiting.")
         return 1
+
+    # Give the screen recorder extra time to finish writing/closing the MP4.
+    # A longer delay helps avoid 'moov atom not found' if mux is triggered immediately.
+    time.sleep(30)
 
     ok = mux_one(video_screen, audio_wav, out_screen, ffmpeg_exe)
     if not screen_only:

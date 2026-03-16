@@ -36,6 +36,14 @@ class App(tk.Tk):
         # When True, merge screen video + internal audio into recordings/screen_with_audio after Stop Both
         self._auto_mux = bool(auto_mux)
 
+        # TODO(alber): file naming / suffix logic
+        # Right now, filename uniqueness (adding _1, _2, … suffixes) is handled
+        # inside each recorder (screen, webcam, audio) via unique_name_with_suffix().
+        # That prevents overwrites, but the suffixes are per-folder/type only.
+        # For a more polished UX, centralize this logic here so all outputs for a
+        # single "session" (screen, webcam, audio, muxed) share a consistent
+        # base name and run index, and display that in the UI.
+
         self._build()
         self.update_idletasks()
 
