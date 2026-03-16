@@ -17,6 +17,7 @@ from recorder.common import (
     email_filename_part,
     make_even,
     resize_frame,
+    unique_name_with_suffix,
 )
 
 _dxcam = None
@@ -78,8 +79,12 @@ class ScreenRecorder:
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
         (save_path / ".gitkeep").touch(exist_ok=True)
-        name_part = email_filename_part(email) if email else "user"
-        self.filename = str(save_path / f"{name_part}_screen{config.VIDEO_EXT}")
+        base = email_filename_part(email) if email else "user"
+        # email_screen.mp4, email_1_screen.mp4, email_2_screen.mp4, ...
+        candidate = unique_name_with_suffix(
+            save_path, base, f"_screen{config.VIDEO_EXT}"
+        )
+        self.filename = str(candidate)
         self.recording = True
         self._pending_recording = (str(save_dir), start_barrier, email)
 
@@ -92,8 +97,11 @@ class ScreenRecorder:
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
         (save_path / ".gitkeep").touch(exist_ok=True)
-        name_part = email_filename_part(email) if email else "user"
-        self.filename = str(save_path / f"{name_part}_screen{config.VIDEO_EXT}")
+        base = email_filename_part(email) if email else "user"
+        candidate = unique_name_with_suffix(
+            save_path, base, f"_screen{config.VIDEO_EXT}"
+        )
+        self.filename = str(candidate)
         self._thread = threading.Thread(
             target=self._run, args=(False, save_dir, start_barrier, email), daemon=True
         )

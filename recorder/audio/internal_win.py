@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from recorder import config
-from recorder.common import email_filename_part
+from recorder.common import email_filename_part, unique_name_with_suffix
 
 try:
     import pyaudiowpatch as pyaudio
@@ -93,9 +93,10 @@ class InternalAudioRecorder:
         self._start_time_ref = start_time_ref
         self.recording = True
         save_path = Path(save_dir)
-        save_path.mkdir(parents=True, exist_ok=True)
-        name_part = email_filename_part(email) if email else "user"
-        self.filename = str(save_path / f"{name_part}_audio{config.AUDIO_EXT}")
+        # email_audio.wav, email_1_audio.wav, email_2_audio.wav, ...
+        base = email_filename_part(email) if email else "user"
+        candidate = unique_name_with_suffix(save_path, base, f"_audio{config.AUDIO_EXT}")
+        self.filename = str(candidate)
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
