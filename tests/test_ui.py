@@ -1,7 +1,10 @@
-"""UI test: launch the full recorder app window."""
+"""UI test: launch the full recorder app window (PySide)."""
 
 import sys
 from pathlib import Path
+
+from PySide6 import QtWidgets
+
 
 if __name__ == "__main__":
     _root = Path(__file__).resolve().parent.parent
@@ -20,10 +23,11 @@ def run_ui() -> int:
         return 1
     config.ensure_recordings_dirs()
     print("Opening recorder UI. Close the window when done.")
-    app = App()
-    app.protocol("WM_DELETE_WINDOW", app.on_close)
-    app.mainloop()
-    return 0
+    qt_app = QtWidgets.QApplication(sys.argv)
+    win = App()
+    win.show()
+    code = qt_app.exec()
+    return int(code)
 
 
 if __name__ == "__main__":

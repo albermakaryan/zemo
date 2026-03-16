@@ -1,4 +1,4 @@
-"""Main application window: top bar, recorder panels, and recording actions."""
+"""Main application window (PyQt): top bar, recorder panels, and recording actions."""
 
 import sys
 import subprocess
@@ -6,7 +6,7 @@ import time
 import threading
 from pathlib import Path
 
-import tkinter as tk
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from recorder import config, __version__
 from recorder.common import email_filename_part
@@ -19,47 +19,51 @@ from recorder.ui.float_button import FloatButtonWindow
 from recorder.ui.panels import RecorderPanel
 
 
-class App(tk.Tk):
-    """Main recorder application window."""
+class App(QtWidgets.QMainWindow):
+    """Main recorder application window (PyQt)."""
 
-    def __init__(self, auto_mux: bool = True):
-        super().__init__()
-        self.title(f"Recorder v{__version__}")
-        self.configure(bg=config.BG)
-        self.resizable(False, False)
+    def __init__(self, auto_mux: bool = True, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Recorder v{__version__}")
+        self.setObjectName("MainWindow")
+        self.setStyleSheet(
+            f"""
+            QMainWindow#MainWindow {{
+                background-color: {config.BG};
+            }}
+            """
+        )
+        self.setWindowIcon(QtGui.QIcon())
+        self.setMinimumSize(2 * config.PREVIEW_W + 96, config.PREVIEW_H + 180)
 
         config.ensure_recordings_dirs()
         self._recordings_base = config.get_recordings_dir()
         self._user_email = None
-        # Internal (system) audio; started with Record Both when available
         self._audio_recorder = None
-        # When True, merge screen video + internal audio into recordings/screen_with_audio after Stop Both
         self._auto_mux = bool(auto_mux)
 
-        # TODO(alber): file naming / suffix logic
-        # Right now, filename uniqueness (adding _1, _2, … suffixes) is handled
-        # inside each recorder (screen, webcam, audio) via unique_name_with_suffix().
-        # That prevents overwrites, but the suffixes are per-folder/type only.
-        # For a more polished UX, centralize this logic here so all outputs for a
-        # single "session" (screen, webcam, audio, muxed) share a consistent
-        # base name and run index, and display that in the UI.
+        self._central = QtWidgets.QWidget(self)
+        self.setCentralWidget(self._central)
 
         self._build()
-        self.update_idletasks()
-
         self._float_win = FloatButtonWindow(self)
+        self._float_win.show()
 
-        # Show main window with webcam + screen preview (no recording, no email yet)
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        self.update_idletasks()
-        ww = self.winfo_width()
-        wh = self.winfo_height()
-        self.geometry(f"+{(sw - ww) // 2}+{(sh - wh) // 2}")
-        self.lift()
-        self.attributes("-topmost", True)
-        self.after(100, lambda: self.attributes("-topmost", False))
+        self._center_on_screen()
         self._start_previews()
+
+    def _center_on_screen(self):
+        screen = QtWidgets.QApplication.primaryScreen()
+        if screen is None:
+            return
+        geo = screen.availableGeometry()
+        self.resize(
+            2 * config.PREVIEW_W + 96,
+            config.PREVIEW_H + 180,
+        )
+        size = self.frameGeometry()
+        size.moveCenter(geo.center())
+        self.move(size.topLeft())
 
     def _start_previews(self):
         """Start webcam (and screen if supported) in preview-only mode so capture runs from app start."""
@@ -68,96 +72,128 @@ class App(tk.Tk):
                 panel._start_preview()
 
     def _build(self):
-        topbar = tk.Frame(self, bg=config.BG, pady=0)
-        topbar.pack(fill="x", padx=24, pady=(20, 0))
+        root_layout = QtWidgets.QVBoxLayout(self._central)
+        root_layout.setContentsMargins(24, 20, 24, 16)
+        root_layout.setSpacing(16)
 
-        tk.Label(
-            topbar,
-            text="● REC",
-            font=("Courier New", 11, "bold"),
-            bg=config.BG,
-            fg=config.RED,
-        ).pack(side="left")
-        tk.Label(
-            topbar,
-            text="  STUDIO",
-            font=("Courier New", 11),
-            bg=config.BG,
-            fg=config.FG2,
-        ).pack(side="left")
+        # Top bar
+        topbar = QtWidgets.QFrame(self._central)
+        topbar.setStyleSheet(f"background-color: {config.BG};")
+        top_layout = QtWidgets.QHBoxLayout(topbar)
+        top_layout.setContentsMargins(0, 0, 0, 0)
 
-        sans = config.sans_font()
-        self._btn_both = tk.Button(
-            topbar,
-            text="⏺  Record Both",
-            font=sans,
-            bg=config.BG3,
-            fg=config.FG,
-            relief="flat",
-            cursor="hand2",
-            activebackground=config.BORDER,
-            activeforeground=config.FG,
-            padx=16,
-            pady=8,
-            command=self._record_both,
+        mono_font = QtGui.QFont("Courier New", 11)
+        mono_bold = QtGui.QFont("Courier New", 11, QtGui.QFont.Weight.Bold)
+
+        lbl_rec = QtWidgets.QLabel("● REC", topbar)
+        lbl_rec.setFont(mono_bold)
+        lbl_rec.setStyleSheet(f"color: {config.RED};")
+        top_layout.addWidget(lbl_rec, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        lbl_studio = QtWidgets.QLabel("  STUDIO", topbar)
+        lbl_studio.setFont(mono_font)
+        lbl_studio.setStyleSheet(f"color: {config.FG2};")
+        top_layout.addWidget(lbl_studio, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+
+        top_layout.addStretch(1)
+
+        sans_font = QtGui.QFont("Segoe UI", 10)
+        self._btn_both = QtWidgets.QPushButton("⏺  Record Both", topbar)
+        self._btn_both.setFont(sans_font)
+        self._btn_both.setCursor(
+            QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         )
-        self._btn_both.pack(side="right")
+        self._btn_both.setStyleSheet(
+            f"""
+            QPushButton {{
+                background-color: {config.BG3};
+                color: {config.FG};
+                border: none;
+                padding: 8px 16px;
+            }}
+            QPushButton:hover {{
+                background-color: {config.BORDER};
+            }}
+            """
+        )
+        self._btn_both.clicked.connect(self.record_both)
+        top_layout.addWidget(self._btn_both, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
 
-        panels = tk.Frame(self, bg=config.BG)
-        panels.pack(padx=24, pady=16)
+        root_layout.addWidget(topbar)
+
+        # Panels
+        panels = QtWidgets.QFrame(self._central)
+        panels.setStyleSheet(f"background-color: {config.BG};")
+        panels_layout = QtWidgets.QHBoxLayout(panels)
+        panels_layout.setContentsMargins(0, 0, 0, 0)
+        panels_layout.setSpacing(12)
 
         self._webcam_panel = RecorderPanel(
             panels, self, "Webcam", WebcamRecorder, config.WEBCAM_SUBDIR
         )
-        self._webcam_panel.pack(side="left", padx=(0, 12))
-
         self._screen_panel = RecorderPanel(
             panels, self, "Screen", ScreenRecorder, config.SCREEN_SUBDIR
         )
-        self._screen_panel.pack(side="left")
 
-        bottom = tk.Frame(self, bg=config.BG)
-        bottom.pack(fill="x", padx=24, pady=(0, 16))
+        panels_layout.addWidget(self._webcam_panel)
+        panels_layout.addWidget(self._screen_panel)
 
-        self._btn_stop_both = tk.Button(
-            bottom,
-            text="⏹  Stop Both",
-            font=sans,
-            bg=config.BG3,
-            fg=config.RED,
-            relief="flat",
-            cursor="hand2",
-            activebackground=config.BORDER,
-            activeforeground=config.RED,
-            padx=16,
-            pady=8,
-            command=self._stop_both,
-        )
-        self._btn_stop_both.pack(side="left")
+        root_layout.addWidget(panels)
 
-        self._email_lbl = tk.Label(
-            bottom,
-            text="",
-            font=config.MONO_SM,
-            bg=config.BG,
-            fg=config.MUTED,
+        # Bottom bar
+        bottom = QtWidgets.QFrame(self._central)
+        bottom.setStyleSheet(f"background-color: {config.BG};")
+        bottom_layout = QtWidgets.QHBoxLayout(bottom)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._btn_stop_both = QtWidgets.QPushButton("⏹  Stop Both", bottom)
+        self._btn_stop_both.setFont(sans_font)
+        self._btn_stop_both.setCursor(
+            QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         )
-        self._email_lbl.pack(side="right", padx=(8, 0))
-        self._audio_status_lbl = tk.Label(
-            bottom,
-            text="",
-            font=config.MONO_SM,
-            bg=config.BG,
-            fg=config.MUTED,
+        self._btn_stop_both.setStyleSheet(
+            f"""
+            QPushButton {{
+                background-color: {config.BG3};
+                color: {config.RED};
+                border: none;
+                padding: 8px 16px;
+            }}
+            QPushButton:hover {{
+                background-color: {config.BORDER};
+                color: {config.RED};
+            }}
+            """
         )
-        self._audio_status_lbl.pack(side="right", padx=(8, 0))
-        tk.Label(
-            bottom,
-            text="Press ⏹ Stop to save. Saves to recordings/webcam, screen & audio",
-            font=config.MONO_SM,
-            bg=config.BG,
-            fg=config.MUTED,
-        ).pack(side="right")
+        self._btn_stop_both.clicked.connect(self.stop_both)
+        bottom_layout.addWidget(self._btn_stop_both)
+
+        bottom_layout.addStretch(1)
+
+        mono_sm = QtGui.QFont("Courier New", 9)
+
+        info_lbl = QtWidgets.QLabel(
+            "Press ⏹ Stop to save. Saves to recordings/webcam, screen & audio", bottom
+        )
+        info_lbl.setFont(mono_sm)
+        info_lbl.setStyleSheet(f"color: {config.MUTED};")
+        bottom_layout.addWidget(info_lbl, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+
+        self._audio_status_lbl = QtWidgets.QLabel("", bottom)
+        self._audio_status_lbl.setFont(mono_sm)
+        self._audio_status_lbl.setStyleSheet(
+            f"color: {config.MUTED}; margin-left: 8px;"
+        )
+        bottom_layout.addWidget(self._audio_status_lbl)
+
+        self._email_lbl = QtWidgets.QLabel("", bottom)
+        self._email_lbl.setFont(mono_sm)
+        self._email_lbl.setStyleSheet(
+            f"color: {config.MUTED}; margin-left: 8px;"
+        )
+        bottom_layout.addWidget(self._email_lbl)
+
+        root_layout.addWidget(bottom)
 
     def get_recording_email(self):
         """Return current university email; if not set, show dialog. Returns None if user cancels."""
@@ -166,10 +202,11 @@ class App(tk.Tk):
         email = ask_university_email(self)
         if email:
             self._user_email = email
-            self._email_lbl.config(text=f"Recording as: {email}")
+            self._email_lbl.setText(f"Recording as: {email}")
         return email
 
-    def _record_both(self):
+    # Public helpers used by FloatButtonWindow
+    def record_both(self):
         email = self.get_recording_email()
         if not email:
             return
@@ -187,7 +224,9 @@ class App(tk.Tk):
         if use_audio:
             self._audio_recorder = InternalAudioRecorder(
                 on_status=self._on_audio_status,
-                on_done=lambda f: self.after(0, lambda: self._on_audio_done(f)),
+                on_done=lambda f: QtCore.QTimer.singleShot(
+                    0, lambda: self._on_audio_done(f)
+                ),
             )
             save_dir = str(config.get_audio_dir())
             self._audio_recorder.start(
@@ -196,21 +235,24 @@ class App(tk.Tk):
                 start_time_ref=shared_start_time,
                 email=email,
             )
-            self._audio_status_lbl.config(text="+ audio", fg=config.GREEN)
+            self._audio_status_lbl.setText("+ audio")
+            self._audio_status_lbl.setStyleSheet(f"color: {config.GREEN};")
         else:
             self._audio_recorder = None
-            self._audio_status_lbl.config(text="(no system audio)", fg=config.MUTED)
+            self._audio_status_lbl.setText("(no system audio)")
+            self._audio_status_lbl.setStyleSheet(f"color: {config.MUTED};")
 
     def _on_audio_status(self, status: str, message: str):
         def _():
-            self._audio_status_lbl.config(text=message[:40] if message else status)
+            self._audio_status_lbl.setText(message[:40] if message else status)
 
-        self.after(0, _)
+        QtCore.QTimer.singleShot(0, _)
 
     def _on_audio_done(self, filename: str):
-        self._audio_status_lbl.config(text="audio saved", fg=config.MUTED)
+        self._audio_status_lbl.setText("audio saved")
+        self._audio_status_lbl.setStyleSheet(f"color: {config.MUTED};")
 
-    def _stop_both(self):
+    def stop_both(self):
         """
         Stop all recorders (webcam, screen, and audio if active) with one shared stop_time,
         then join their threads concurrently. Optionally mux screen+audio.
@@ -308,8 +350,8 @@ class App(tk.Tk):
         for t in join_threads:
             t.join(timeout=timeout)
 
-    def on_close(self):
-        """Gracefully stop all recordings before destroying the window."""
+    def closeEvent(self, event: QtGui.QCloseEvent):
+        """Gracefully stop all recordings before closing the window."""
         stop_time = time.time()
         for panel in (self._webcam_panel, self._screen_panel):
             recorder = getattr(panel, "recorder", None)
@@ -319,6 +361,6 @@ class App(tk.Tk):
             self._audio_recorder.stop(stop_time=stop_time)
         self._join_recorders_concurrent(timeout=5.0)
 
-        if getattr(self, "_float_win", None) and self._float_win.winfo_exists():
-            self._float_win.destroy()
-        self.destroy()
+        if getattr(self, "_float_win", None):
+            self._float_win.close()
+        super().closeEvent(event)

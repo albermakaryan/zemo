@@ -9,5 +9,8 @@ dxcam-cpp==0.2.5
 PyAudioWPatch>=0.2.12.0
 # Optional: bundled ffmpeg for mux_audio_into_video when ffmpeg not on PATH
 imageio-ffmpeg>=0.4.9
-pyautogui=0.9.54
-keyboard=0.13.5
+pyautogui==0.9.54
+keyboard==0.13.5
+
+# UI: PySide6 for the main application window
+PySide6>=6.4.0

@@ -91,9 +91,9 @@ zemo/
 ├── recorder/            # Package
 │   ├── __init__.py
 │   ├── config.py        # Paths, constants, theme
-│   ├── ui/              # App, panels, float button
+│   ├── ui/              # App, panels, float button (Qt UI layer)
+│   ├── core/            # Core recording logic (webcam/screen), no UI
 │   ├── audio/           # Internal (system) audio recorder (Windows + Linux backends)
-│   └── screen_recorder.py, webcam_recorder.py, ...
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
     ├── screen/          # Screen MP4s
