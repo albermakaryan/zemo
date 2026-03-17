@@ -10,15 +10,46 @@ Start:
   Linux/macOS: ./run_recorder.sh  or  python main.py
 """
 
+import ctypes
 import sys
+
+
+def _check_vcredist() -> None:
+    """Warn early if the VC++ 2015-2022 runtime is missing instead of crashing silently."""
+    required = ["vcruntime140.dll", "msvcp140.dll"]
+    missing = [dll for dll in required if not _dll_loadable(dll)]
+    if not missing:
+        return
+
+    msg = (
+        "This application requires the Microsoft Visual C++ Redistributable "
+        "(2015-2022 x64) which is missing on this machine.\n\n"
+        "Download and install it from:\n"
+        "https://aka.ms/vs/17/release/vc_redist.x64.exe\n\n"
+        f"Missing: {', '.join(missing)}"
+    )
+    ctypes.windll.user32.MessageBoxW(0, msg, "Missing Runtime — Recorder", 0x10)
+    sys.exit(1)
+
+
+def _dll_loadable(name: str) -> bool:
+    try:
+        ctypes.WinDLL(name)
+        return True
+    except OSError:
+        return False
+
+
+if sys.platform == "win32":
+    _check_vcredist()
 
 from PySide6 import QtWidgets
 
 
 def main():
-    # Auto-mux screen video with internal audio after "Stop Both"
-    # Can be disabled with CLI flag: --no-auto-mux
-    auto_mux = "--no-auto-mux" not in sys.argv
+    # Auto-mux screen video with internal audio after "Stop Both".
+    # Off by default; enable with CLI flag: --auto-mux
+    auto_mux = "--auto-mux" in sys.argv
 
     from recorder.ui import App
 

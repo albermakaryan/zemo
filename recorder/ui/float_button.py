@@ -8,7 +8,7 @@ from recorder import config
 class FloatButtonWindow(QtWidgets.QWidget):
     """Always-on-top floating window with one big circular Start/Stop button and countdown."""
 
-    SIZE = 120  # circular button window (width = height)
+    SIZE = 72  # circular button window (width = height)
 
     def __init__(self, app_window: QtWidgets.QWidget):
         super().__init__(None, QtCore.Qt.WindowType.FramelessWindowHint)
@@ -49,10 +49,10 @@ class FloatButtonWindow(QtWidgets.QWidget):
     def _place_topright(self):
         screen = QtWidgets.QApplication.primaryScreen()
         if screen is None:
-            self.move(100, config.FLOAT_TOP_OFFSET)
+            self.move(8, config.FLOAT_TOP_OFFSET)
             return
         geo = screen.availableGeometry()
-        x = max(0, geo.right() - self.width() - 8)
+        x = geo.left() + 8
         y = config.FLOAT_TOP_OFFSET
         self.move(x, y)
 
@@ -109,7 +109,7 @@ class FloatButtonWindow(QtWidgets.QWidget):
         painter.drawEllipse(rect)
 
         painter.setPen(text_color)
-        font = QtGui.QFont("Segoe UI", 32, QtGui.QFont.Weight.Bold)
+        font = QtGui.QFont("Segoe UI", 20, QtGui.QFont.Weight.Bold)
         painter.setFont(font)
         painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
         painter.end()
@@ -133,8 +133,18 @@ class FloatButtonWindow(QtWidgets.QWidget):
 
     def _on_clicked(self):
         if self._is_recording():
-            self._app.stop_both()
-            self._update_ui()
+            dlg = QtWidgets.QMessageBox(self)
+            dlg.setWindowTitle("Stop recording?")
+            dlg.setText("Do you want to stop the recording?")
+            dlg.setStandardButtons(
+                QtWidgets.QMessageBox.StandardButton.Yes
+                | QtWidgets.QMessageBox.StandardButton.No
+            )
+            dlg.setDefaultButton(QtWidgets.QMessageBox.StandardButton.No)
+            if dlg.exec() == QtWidgets.QMessageBox.StandardButton.Yes:
+                self._app.stop_both()
+                self._update_ui()
+            return
         elif not self._is_counting_down():
             if not self._app.get_recording_email():
                 return
@@ -149,14 +159,15 @@ class FloatButtonWindow(QtWidgets.QWidget):
         self._update_ui()
 
     def _countdown_tick(self):
+        self._countdown_remaining -= 1
         if self._countdown_remaining <= 0:
+            self._countdown_remaining = 0
             self._countdown_timer.stop()
             saved_pos = self.pos()
             self._app.record_both()
             self._update_ui()
             self.move(saved_pos)
             return
-        self._countdown_remaining -= 1
         self._update_ui()
 
     def _update_ui(self):
