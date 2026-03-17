@@ -109,18 +109,13 @@ def mux_one(
         "cfr",
         str(out_path),
     ]
+    print("  Muxing audio into video…")
     try:
-        # Show full ffmpeg output so failures are easy to debug.
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        if result.stderr:
-            # ffmpeg prints a lot to stderr even on success; keep it visible for troubleshooting.
-            print(result.stderr)
-        print("  OK: {}".format(out_path.name))
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        print("  Done. Saved to: {}".format(out_path))
         return True
-    except subprocess.CalledProcessError as e:
-        err = (e.stderr or str(e)) if e.stderr is not None else str(e)
-        print("  FAIL: {} -".format(out_path.name))
-        print(err)
+    except subprocess.CalledProcessError:
+        print("  Muxing failed.")
         return False
 
 
@@ -183,10 +178,6 @@ def main():
     if not audio_wav.exists():
         print("  Audio file not found. Exiting.")
         return 1
-
-    # Give the screen recorder extra time to finish writing/closing the MP4.
-    # A longer delay helps avoid 'moov atom not found' if mux is triggered immediately.
-    time.sleep(30)
 
     ok = mux_one(video_screen, audio_wav, out_screen, ffmpeg_exe)
     if not screen_only:

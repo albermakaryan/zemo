@@ -122,6 +122,8 @@ class RecorderPanel(QtWidgets.QFrame):
         self._btn_record = QtWidgets.QPushButton("⏺  Start Recording", ctrl)
         self._btn_record.setFont(sans_font)
         self._btn_record.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        # Do not allow keyboard focus, so Space/Enter cannot trigger recording.
+        self._btn_record.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self._btn_record.setStyleSheet(
             f"""
             QPushButton {{

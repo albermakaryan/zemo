@@ -32,6 +32,8 @@ class FloatButtonWindow(QtWidgets.QWidget):
             QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         )
         self._canvas.setFlat(True)
+        # Do not allow keyboard focus; only mouse clicks should toggle recording.
+        self._canvas.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self._canvas.clicked.connect(self._on_clicked)
         layout.addWidget(self._canvas)
 

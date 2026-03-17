@@ -130,7 +130,14 @@ class InternalAudioRecorder:
 
                 if self._start_barrier is not None:
                     self._start_barrier.wait()
-                self._stream_started = False
+
+                # last_cb_time tracks when the previous callback fired so we can
+                # detect gaps caused by WASAPI not delivering callbacks while the
+                # audio device is idle (e.g. user pauses the watched video).
+                # time.perf_counter() has ~100 ns resolution on Windows, avoiding
+                # the ~15 ms timer-tick jitter of time.time() that would otherwise
+                # insert spurious silence on every callback.
+                last_cb_time: List[Optional[float]] = [None]
 
                 with wave.open(self.filename, "wb") as wf:
                     wf.setnchannels(nchannels)
@@ -140,9 +147,19 @@ class InternalAudioRecorder:
                     def callback(
                         in_data: bytes, frame_count: int, time_info: dict, status: int
                     ) -> tuple:
-                        if self._stream_started and not self._stop.is_set():
-                            # Write frames directly to disk; wave module will fix header on close.
-                            wf.writeframes(in_data)
+                        now = time.perf_counter()
+                        prev = last_cb_time[0]
+                        last_cb_time[0] = now
+
+                        if prev is not None:
+                            interval = now - prev
+                            gap = int(interval * sample_rate) - frame_count
+                            # 1 s threshold: pauses are always multi-second; this
+                            # safely ignores any OS scheduling jitter on the callback.
+                            if gap > sample_rate:
+                                wf.writeframes(bytes(gap * nchannels * sampwidth))
+
+                        wf.writeframes(in_data)
                         return (in_data, pyaudio.paContinue)
 
                     stream = p.open(
@@ -155,7 +172,6 @@ class InternalAudioRecorder:
                         stream_callback=callback,
                     )
                     stream.start_stream()
-                    self._stream_started = True
                     try:
                         while not self._stop.is_set():
                             time.sleep(0.05)
