@@ -130,10 +130,6 @@ SCREEN_CATCHUP_FRAMES = 20
 AUDIO_SAMPLE_RATE = 44100
 AUDIO_CHUNK_SIZE = 1024
 AUDIO_EXT = ".wav"
-# Fixed silence prepended to every audio recording to compensate for
-# WASAPI/PyAudio startup latency.  Increase if audio is still behind video;
-# decrease (min 0) if audio is ahead.  Units: milliseconds.
-AUDIO_SYNC_OFFSET_MS = 2000
 
 # Float button: position (top-right, a bit below top so browser close button stays reachable)
 FLOAT_TOP_OFFSET = 56

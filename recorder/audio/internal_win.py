@@ -17,6 +17,7 @@ padding (the previous approach), which handles most cases acceptably.
 import queue
 import sys
 import threading
+import time
 import wave
 from fractions import Fraction
 from pathlib import Path
@@ -54,6 +55,13 @@ def is_loopback_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def _is_silent(raw: bytes, threshold: int = 50) -> bool:
+    """True if every sample in the raw PCM buffer is below threshold (16-bit signed)."""
+    import struct
+    samples = struct.unpack(f"{len(raw) // 2}h", raw)
+    return max(abs(s) for s in samples) < threshold
 
 
 def _keep_wasapi_active(
@@ -208,13 +216,16 @@ class InternalAudioRecorder:
                 if self._start_barrier is not None:
                     self._start_barrier.wait()
 
+                # Capture T=0 immediately after the barrier releases.
+                t0 = time.perf_counter()
+
                 try:
                     if _HAS_AV:
-                        self._record_av(p, device, sample_rate, nchannels)
+                        self._record_av(p, device, sample_rate, nchannels, t0, _silence_stop)
                     else:
-                        self._record_wav(p, device, sample_rate, nchannels, sampwidth)
+                        self._record_wav(p, device, sample_rate, nchannels, sampwidth, t0, _silence_stop)
                 finally:
-                    _silence_stop.set()
+                    _silence_stop.set()  # failsafe: stop keepalive if recording ends before real audio
 
         except Exception as e:
             self.on_status("error", str(e))
@@ -232,6 +243,8 @@ class InternalAudioRecorder:
         device: Dict[str, Any],
         sample_rate: int,
         nchannels: int,
+        t0: float,
+        silence_stop: threading.Event,
     ) -> None:
         """
         Write .mka using blocking pull mode (no stream_callback).
@@ -242,8 +255,8 @@ class InternalAudioRecorder:
         audio is playing. PTS increments by chunk_size on every read, giving a
         continuous, gap-free timeline from the moment the stream opens.
 
-        A fixed silence block of config.AUDIO_SYNC_OFFSET_MS is prepended so
-        the audio timeline is anchored to the recording start.
+        The small setup gap between barrier release (t0) and stream open is
+        covered by a one-time pre-silence write before the read loop starts.
         """
         av = _av
         layout = "stereo" if nchannels == 2 else "mono"
@@ -285,9 +298,8 @@ class InternalAudioRecorder:
             except Exception as exc:
                 writer_error[0] = exc
 
-        # Open with start=False so the loopback does not buffer data while
-        # the writer thread is initialising.  start_stream() below is the
-        # exact point at which capture begins.
+        # Blocking mode — no stream_callback.
+        # WASAPI returns silence frames when the device is idle.
         stream_handle = p.open(
             format=pyaudio.paInt16,
             channels=nchannels,
@@ -295,7 +307,6 @@ class InternalAudioRecorder:
             frames_per_buffer=chunk_size,
             input=True,
             input_device_index=device["index"],
-            start=False,
         )
 
         writer_thread = threading.Thread(target=_writer, daemon=True)
@@ -307,17 +318,11 @@ class InternalAudioRecorder:
             stream_handle.close()
             return
 
-        # Fixed silence offset: anchors the audio timeline and compensates
-        # for WASAPI/PyAudio startup latency.  Tune config.AUDIO_SYNC_OFFSET_MS
-        # if audio drifts ahead or behind the video.
-        offset_frames = int(config.AUDIO_SYNC_OFFSET_MS / 1000 * sample_rate)
-        if offset_frames > 0:
-            audio_q.put((0, bytes(offset_frames * nchannels * 2)))
-        pts = offset_frames
-
         self.on_status("recording", "(system audio · blocking read)")
         stream_handle.start_stream()
 
+        pts = 0
+        first_read = True
         try:
             while not self._stop.is_set():
                 try:
@@ -325,6 +330,20 @@ class InternalAudioRecorder:
                 except OSError as e:
                     self.on_status("warning", f"audio read error: {e}")
                     break
+                if first_read:
+                    # Measure the actual delay from barrier release to first
+                    # delivered frame (covers writer startup + stream open +
+                    # silence player warmup). Write silence to fill that gap
+                    # so the audio timeline starts at exactly T=0.
+                    first_read = False
+                    elapsed = time.perf_counter() - t0
+                    pts = max(0, int(elapsed * sample_rate))
+                    if pts > 0:
+                        audio_q.put((0, bytes(pts * nchannels * 2)))
+                # Stop the keepalive the moment real audio arrives — the engine
+                # sustains itself from here and we no longer need silent output.
+                if not silence_stop.is_set() and not _is_silent(raw):
+                    silence_stop.set()
                 try:
                     audio_q.put_nowait((pts, raw))
                 except queue.Full:
@@ -354,13 +373,16 @@ class InternalAudioRecorder:
         sample_rate: int,
         nchannels: int,
         sampwidth: int,
+        t0: float,
+        silence_stop: threading.Event,
     ) -> None:
         """
         Write .wav using blocking pull mode (no stream_callback).
 
         Same principle as _record_av: WASAPI returns silence when idle, so the
-        read loop delivers a continuous stream from T=0. A fixed silence block
-        of config.AUDIO_SYNC_OFFSET_MS is prepended to anchor the timeline.
+        read loop delivers a continuous stream from T=0. No gap detection or
+        silence insertion logic needed — pauses in the watched video show up as
+        silence in the data naturally.
         """
         chunk_size = config.AUDIO_CHUNK_SIZE
 
@@ -377,7 +399,7 @@ class InternalAudioRecorder:
                 except queue.Empty:
                     continue
 
-        # Open with start=False so no data buffers before the writer is ready.
+        # Blocking mode — no stream_callback.
         stream_handle = p.open(
             format=pyaudio.paInt16,
             channels=nchannels,
@@ -385,7 +407,6 @@ class InternalAudioRecorder:
             frames_per_buffer=chunk_size,
             input=True,
             input_device_index=device["index"],
-            start=False,
         )
 
         with wave.open(self.filename, "wb") as wf:
@@ -396,12 +417,8 @@ class InternalAudioRecorder:
             writer_thread = threading.Thread(target=_writer, args=(wf,), daemon=True)
             writer_thread.start()
 
-            # Fixed silence offset — same as the MKA path.
-            offset_frames = int(config.AUDIO_SYNC_OFFSET_MS / 1000 * sample_rate)
-            if offset_frames > 0:
-                audio_q.put(bytes(offset_frames * nchannels * sampwidth))
-
             stream_handle.start_stream()
+            first_read = True
             try:
                 while not self._stop.is_set():
                     try:
@@ -409,6 +426,14 @@ class InternalAudioRecorder:
                     except OSError as e:
                         self.on_status("warning", f"audio read error: {e}")
                         break
+                    if first_read:
+                        first_read = False
+                        elapsed = time.perf_counter() - t0
+                        silence_frames = max(0, int(elapsed * sample_rate))
+                        if silence_frames > 0:
+                            audio_q.put(bytes(silence_frames * nchannels * sampwidth))
+                    if not silence_stop.is_set() and not _is_silent(raw):
+                        silence_stop.set()
                     try:
                         audio_q.put_nowait(raw)
                     except queue.Full:
