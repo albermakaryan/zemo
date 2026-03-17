@@ -12,5 +12,8 @@ imageio-ffmpeg>=0.4.9
 pyautogui==0.9.54
 keyboard==0.13.5
 
+# Audio: PyAV for Matroska Audio output with hardware PTS (exact sync)
+av>=12.0.0
+
 # UI: PySide6 for the main application window
 PySide6>=6.4.0

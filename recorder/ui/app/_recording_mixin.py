@@ -197,7 +197,9 @@ class RecordingMixin:
         try:
             # Small delay so the screen MP4 is fully written before
             # the CLI helper probes and muxes it.
+            print("Waiting for screen video to be fully written...")
             time.sleep(60)
+            print("Done waiting.")
             cmd = [sys.executable, "-m", "recorder.audio.mux_audio_into_video", "--screen-only", email]
             print(f"Muxing:\n  Video : {screen_p}\n  Audio : {audio_p}")
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

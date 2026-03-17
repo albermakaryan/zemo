@@ -86,6 +86,11 @@ def mux_one(
         # Don't attempt muxing with a corrupted/incomplete MP4.
         return False
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    # When audio is a .mka file produced by the PyAV path it already carries
+    # exact hardware PTS — aresample=async and first_pts=0 would corrupt that
+    # precision, so they are omitted.  For .wav the command is the same: the
+    # WAV is already silence-padded to match the video timeline, so drift
+    # correction is not needed there either.
     cmd = [
         ffmpeg_exe,
         "-y",
@@ -103,10 +108,6 @@ def mux_one(
         "aac",
         "-b:a",
         "192k",
-        "-af",
-        "aresample=async=1:min_hard_comp=0.100000:first_pts=0",
-        "-vsync",
-        "cfr",
         str(out_path),
     ]
     print("  Muxing audio into video…")
@@ -163,8 +164,12 @@ def main():
     screen_with_audio_dir = recordings_dir / "screen_with_audio"
 
     video_screen = screen_dir / "{}_screen.mp4".format(email)
-    audio_wav = audio_dir / "{}_audio.wav".format(email)
     out_screen = screen_with_audio_dir / "{}_screen_with_audio.mp4".format(email)
+
+    # Prefer .mka (PyAV path with hardware PTS) over .wav (silence-padding fallback).
+    audio_mka = audio_dir / "{}_audio.mka".format(email)
+    audio_wav = audio_dir / "{}_audio.wav".format(email)
+    audio_path = audio_mka if audio_mka.exists() else audio_wav
 
     ffmpeg_exe = _get_ffmpeg_exe()
     if not ffmpeg_exe:
@@ -174,16 +179,16 @@ def main():
         return 1
 
     print("Adding audio to screen video: {}".format(email))
-    print("  Audio: {}".format(audio_wav))
-    if not audio_wav.exists():
+    print("  Audio: {}".format(audio_path))
+    if not audio_path.exists():
         print("  Audio file not found. Exiting.")
         return 1
 
-    ok = mux_one(video_screen, audio_wav, out_screen, ffmpeg_exe)
+    ok = mux_one(video_screen, audio_path, out_screen, ffmpeg_exe)
     if not screen_only:
         video_webcam = webcam_dir / "{}_webcam.mp4".format(email)
         out_webcam = webcam_dir / "{}_webcam_with_audio.mp4".format(email)
-        ok = mux_one(video_webcam, audio_wav, out_webcam, ffmpeg_exe) and ok
+        ok = mux_one(video_webcam, audio_path, out_webcam, ffmpeg_exe) and ok
 
     if ok:
         print("Done. Screen+audio: {}".format(out_screen))
