@@ -21,6 +21,58 @@ from recorder.common import (
 )
 
 
+def _try_open_capture(idx: int):
+    """
+    Open camera at index. On Windows, try DirectShow first (usually not mirrored), then MSMF.
+    Returns ``(cap, api_name)``; on failure ``cap`` is None and ``api_name`` is ``""``.
+    """
+    if sys.platform == "win32":
+        if hasattr(cv2, "CAP_DSHOW"):
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                return cap, "dshow"
+            cap.release()
+        if hasattr(cv2, "CAP_MSMF"):
+            cap = cv2.VideoCapture(idx, cv2.CAP_MSMF)
+            if cap.isOpened():
+                return cap, "msmf"
+            cap.release()
+        cap = cv2.VideoCapture(idx)
+        if cap.isOpened():
+            return cap, "default"
+        cap.release()
+        return None, ""
+    cap = cv2.VideoCapture(idx)
+    if cap.isOpened():
+        return cap, "default"
+    cap.release()
+    return None, ""
+
+
+def _effective_horizontal_flip(api_name: str) -> bool:
+    """
+    Whether to apply cv2.flip(..., 1) after each captured frame.
+
+    Config WEBCAM_FLIP_HORIZONTAL:
+      True  -> always flip
+      False -> never flip
+      "auto" -> flip when we expect a mirrored stream from the driver:
+                Windows (dshow / msmf / default backend for this app): yes
+                Linux / macOS (V4L2 / AVFoundation via default OpenCV capture): no
+                If preview is still reversed on those OSes, set True in config.
+    """
+    v = config.WEBCAM_FLIP_HORIZONTAL
+    if v is True:
+        return True
+    if v is False:
+        return False
+    if v == "auto":
+        if sys.platform == "win32" and api_name in ("dshow", "msmf", "default"):
+            return True
+        return False
+    return False
+
+
 class WebcamRecorderCore:
     """Webcam recording in a background thread using OpenCV."""
 
@@ -89,22 +141,21 @@ class WebcamRecorderCore:
         for i in range(5):
             if i not in indices_to_try:
                 indices_to_try.append(i)
+        api_name = ""
         for idx in indices_to_try:
-            if sys.platform == "win32" and hasattr(cv2, "CAP_MSMF"):
-                cap = cv2.VideoCapture(idx, cv2.CAP_MSMF)
-            else:
-                cap = cv2.VideoCapture(idx)
+            cap, api_name = _try_open_capture(idx)
             if cap is not None and cap.isOpened():
                 break
-            if cap is not None:
-                cap.release()
-                cap = None
+            cap = None
+            api_name = ""
         if cap is None or not cap.isOpened():
             self.on_status(
                 "error",
                 "No webcam found (tried indices 0–4). Check /dev/video* or camera permissions.",
             )
             return
+
+        flip_h = _effective_horizontal_flip(api_name)
 
         src_w = make_even(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
         src_h = make_even(int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
@@ -170,6 +221,8 @@ class WebcamRecorderCore:
                 if not ret:
                     time.sleep(0.01)
                     continue
+                if flip_h:
+                    frame = cv2.flip(frame, 1)
                 if (frame.shape[1], frame.shape[0]) != (w, h):
                     frame = cv2.resize(frame, (w, h))
                 elapsed = time.time() - t0 if out else 0

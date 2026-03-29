@@ -120,6 +120,9 @@ RECORDING_HEIGHT = None  # e.g. 1080; None = use source size
 # Default device indices: 0 = first/default camera, 1 = first/primary monitor (mss: 0=all, 1=primary)
 CAMERA_INDEX = 0
 MONITOR_INDEX = 1
+# Webcam horizontal flip (mirror left ↔ right in the image so e.g. text and your raised hand match real life).
+# - True: always flip  - False: never  - "auto": use heuristics in recorder.core.webcam (Windows on by default there).
+WEBCAM_FLIP_HORIZONTAL = "auto"
 # Use mp4v first (no extra DLLs). H.264 needs OpenH264 on Windows and often fails.
 VIDEO_FOURCC_TRY_ORDER = ("mp4v",)
 COUNTDOWN_SECONDS = 5
