@@ -1,91 +1,107 @@
-"""Modal dialogs (e.g. university email)."""
+"""Modal dialogs (e.g. university email) implemented with PySide."""
 
 from typing import Optional
 
-import tkinter as tk
-from tkinter import messagebox
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from recorder import config
 
 
-def ask_university_email(parent: tk.Tk) -> Optional[str]:
-    """Show modal dialog: 'Enter your University email address'. Returns email or None if cancelled."""
-    result = [None]
+class UniversityEmailDialog(QtWidgets.QDialog):
+    """Simple modal dialog asking for a university email address."""
 
-    d = tk.Toplevel(parent)
-    d.title("University email")
-    d.configure(bg=config.BG2)
-    d.resizable(False, False)
-    d.transient(parent)
-    d.grab_set()
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+        self._email: Optional[str] = None
+        self.setWindowTitle("University email")
+        self.setModal(True)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+        self._build_ui()
 
-    tk.Label(
-        d,
-        text="Enter your University email address",
-        font=config.sans_font(),
-        bg=config.BG2,
-        fg=config.FG,
-    ).pack(pady=(16, 8), padx=20, anchor="w")
-    entry = tk.Entry(
-        d,
-        font=config.sans_font(),
-        width=40,
-        bg=config.BG3,
-        fg=config.FG,
-        insertbackground=config.FG,
-    )
-    entry.pack(pady=(0, 16), padx=20, fill="x", ipady=6)
-    entry.focus_set()
+    def _build_ui(self):
+        self.setStyleSheet(
+            f"""
+            QDialog {{
+                background-color: {config.BG2};
+            }}
+            QLabel {{
+                color: {config.FG};
+            }}
+            QLineEdit {{
+                background-color: {config.BG3};
+                color: {config.FG};
+                border: 1px solid {config.BORDER};
+                padding: 6px;
+            }}
+            QPushButton {{
+                background-color: {config.BG3};
+                color: {config.FG};
+                border: none;
+                padding: 6px 16px;
+            }}
+            QPushButton:hover {{
+                background-color: {config.BORDER};
+            }}
+            """
+        )
 
-    def _validate() -> bool:
-        s = (entry.get() or "").strip()
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        label = QtWidgets.QLabel("Enter your University email address", self)
+        label.setFont(QtGui.QFont("Segoe UI", 10))
+        layout.addWidget(label)
+
+        self._entry = QtWidgets.QLineEdit(self)
+        self._entry.setFont(QtGui.QFont("Segoe UI", 10))
+        layout.addWidget(self._entry)
+
+        btn_box = QtWidgets.QDialogButtonBox(self)
+        btn_ok = btn_box.addButton(
+            "OK", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole
+        )
+        btn_cancel = btn_box.addButton(
+            "Cancel", QtWidgets.QDialogButtonBox.ButtonRole.RejectRole
+        )
+        btn_ok.clicked.connect(self._on_ok)
+        btn_cancel.clicked.connect(self.reject)
+
+        layout.addWidget(btn_box)
+
+        self._entry.returnPressed.connect(self._on_ok)
+        self._entry.setFocus()
+
+    def _validate(self) -> bool:
+        s = (self._entry.text() or "").strip()
         if "@" in s and "." in s and len(s) > 5:
-            result[0] = s
+            self._email = s
             return True
-        messagebox.showwarning(
-            "Invalid email", "Please enter a valid university email address.", parent=d
+        QtWidgets.QMessageBox.warning(
+            self,
+            "Invalid email",
+            "Please enter a valid university email address.",
         )
         return False
 
-    def _ok():
-        if _validate():
-            d.destroy()
+    def _on_ok(self):
+        if self._validate():
+            self.accept()
 
-    def _cancel():
-        d.destroy()
+    @property
+    def email(self) -> Optional[str]:
+        return self._email
 
-    btn_frame = tk.Frame(d, bg=config.BG2)
-    btn_frame.pack(pady=(0, 16))
-    tk.Button(
-        btn_frame,
-        text="OK",
-        font=config.sans_font(),
-        bg=config.BG3,
-        fg=config.FG,
-        relief="flat",
-        cursor="hand2",
-        padx=16,
-        pady=6,
-        command=_ok,
-    ).pack(side="left", padx=4)
-    tk.Button(
-        btn_frame,
-        text="Cancel",
-        font=config.sans_font(),
-        bg=config.BG3,
-        fg=config.FG2,
-        relief="flat",
-        cursor="hand2",
-        padx=16,
-        pady=6,
-        command=_cancel,
-    ).pack(side="left", padx=4)
 
-    entry.bind("<Return>", lambda e: _ok())
-    d.protocol("WM_DELETE_WINDOW", _cancel)
-    d.update_idletasks()
-    x = parent.winfo_x() + (parent.winfo_width() - d.winfo_reqwidth()) // 2
-    y = parent.winfo_y() + (parent.winfo_height() - d.winfo_reqheight()) // 2
-    d.geometry(f"+{max(0, x)}+{max(0, y)}")
-    d.wait_window()
-    return result[0]
+def ask_university_email(parent: QtWidgets.QWidget | None) -> Optional[str]:
+    """Show modal dialog asking for university email. Returns email or None if cancelled."""
+    dlg = UniversityEmailDialog(parent)
+    dlg.resize(420, 140)
+    if parent is not None:
+        geo = parent.frameGeometry()
+        center = geo.center()
+        dlg.move(center - dlg.rect().center())
+    result = dlg.exec()
+    if result == QtWidgets.QDialog.DialogCode.Accepted:
+        return dlg.email
+    return None

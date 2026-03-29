@@ -48,17 +48,23 @@ If Python is missing, the batch file opens the Python download page.
 - Clicking **Record Both** starts:
   - Webcam recording to `recordings/webcam/<email>_webcam.mp4`
   - Screen recording to `recordings/screen/<email>_screen.mp4`
-  - Internal/system audio (when available) to `recordings/audio/<email>_audio.wav`
-- All three share:
-  - A common **start barrier** so they begin at the same time.
-  - A shared **wall-clock start time** and **stop time** when you click **Stop Both**.
-- The internal audio recorder stores chunks with timestamps and later builds a WAV that:
-  - Includes any needed silence at the start so it lines up with video.
-  - Pads/trims so its total duration matches the video timeline.
-- After **Stop Both**, the app automatically runs the mux script:
-  - It calls `python -m recorder.audio.mux_audio_into_video --screen-only <email>`
-  - This uses ffmpeg with `aresample=async=1:first_pts=0` and `-vsync cfr` to keep audio/video aligned.
-  - The final synced file is written to `recordings/screen_with_audio/<email>_screen_with_audio.mp4`.
+  - Internal/system audio (when available) to `recordings/audio/<email>_audio.mka` (or `.wav` fallback)
+- All three share a common **start barrier** so they begin at the same instant.
+
+### Audio sync strategy
+
+When `av` (PyAV) is installed the audio recorder writes a **Matroska Audio (.mka)** file instead of WAV. Every FLAC packet carries a PTS derived from WASAPI's `input_buffer_adc_time` (the hardware ADC clock). Because that clock ticks continuously even while the audio device is idle, a pause in the watched video shows up as a PTS jump in the container — no silence padding, no threshold tuning needed. ffmpeg aligns video and audio by PTS when muxing, so sync is mathematically exact.
+
+If `input_buffer_adc_time` is zero (some drivers don't expose it) the recorder falls back to `time.perf_counter()` gap detection: when the inter-callback interval exceeds 8× the nominal callback period (~186 ms at 44100/1024), the PTS is advanced by the measured gap. Same result, slightly less precision.
+
+Without PyAV the recorder falls back to a plain WAV file with silence padding on detected gaps.
+
+The WASAPI callback itself never touches disk — all writes go through a bounded in-memory queue (≈46 s buffer) drained by a dedicated writer thread. This keeps the audio thread timing clean and prevents false gap detections from disk-I/O latency.
+
+- After **Stop Both**, the app automatically muxes screen + audio:
+  - Calls `python -m recorder.audio.mux_audio_into_video --screen-only <email>`
+  - ffmpeg combines the screen MP4 and audio file (`.mka` preferred over `.wav`) by PTS alignment, re-encodes audio to AAC 192k.
+  - Final file: `recordings/screen_with_audio/<email>_screen_with_audio.mp4`.
 
 ## Build a standalone .exe (Windows)
 
@@ -91,13 +97,14 @@ zemo/
 ├── recorder/            # Package
 │   ├── __init__.py
 │   ├── config.py        # Paths, constants, theme
-│   ├── ui/              # App, panels, float button
+│   ├── ui/              # App, panels, float button (Qt UI layer)
+│   ├── core/            # Core recording logic (webcam/screen), no UI
 │   ├── audio/           # Internal (system) audio recorder (Windows + Linux backends)
-│   └── screen_recorder.py, webcam_recorder.py, ...
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
     ├── screen/          # Screen MP4s
-    └── audio/           # System audio WAVs (when available)
+    ├── audio/           # System audio .mka (PyAV) or .wav (fallback)
+    └── screen_with_audio/  # Muxed screen + audio MP4s
 ```
 
 ## Test audio only (no full app)

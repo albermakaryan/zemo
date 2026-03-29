@@ -1,8 +1,11 @@
 """
-Re-exports for backward compatibility. Implementations live in:
-  - recorder.common   (timestamp, fmt_time, resize_frame, frame_to_tk, …)
-  - recorder.webcam_recorder (WebcamRecorder)
-  - recorder.screen_recorder (ScreenRecorder)
+Re-exports for backward compatibility.
+
+Core implementations now live in:
+  - recorder.core.webcam  (WebcamRecorderCore)
+  - recorder.core.screen  (ScreenRecorderCore)
+Utility helpers live in:
+  - recorder.common       (timestamp, fmt_time, resize_frame, …)
 """
 
 from recorder.common import (
@@ -12,8 +15,8 @@ from recorder.common import (
     sanitize_email_for_filename,
     timestamp,
 )
-from recorder.screen_recorder import ScreenRecorder
-from recorder.webcam_recorder import WebcamRecorder
+from recorder.core.screen import ScreenRecorderCore as ScreenRecorder
+from recorder.core.webcam import WebcamRecorderCore as WebcamRecorder
 
 __all__ = [
     "WebcamRecorder",

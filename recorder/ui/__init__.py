@@ -1,6 +1,8 @@
 """
 UI package: main app, panels, floating button, dialogs.
-Recording logic lives in recorder.webcam_recorder / recorder.screen_recorder.
+
+Core recording logic lives in recorder.core (webcam/screen recorders),
+and is wired into the Qt widgets from here.
 """
 
 from recorder.ui.app import App

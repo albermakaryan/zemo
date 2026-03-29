@@ -1,12 +1,37 @@
 # PyInstaller spec for Recorder.exe
 # Run: pyinstaller Recorder.spec
 
+import os
+from pathlib import Path
+
 block_cipher = None
+
+# Bundle VC++ 2015-2022 runtime DLLs so the exe works on machines that don't
+# have the redistributable installed. UPX must not compress them (see upx_exclude).
+_vcredist_names = [
+    'vcruntime140.dll',
+    'vcruntime140_1.dll',
+    'msvcp140.dll',
+    'msvcp140_1.dll',
+    'msvcp140_2.dll',
+    'concrt140.dll',
+]
+_search_dirs = [
+    Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32',
+    Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'SysWOW64',
+]
+_found_dlls = []
+for _dll in _vcredist_names:
+    for _d in _search_dirs:
+        _p = _d / _dll
+        if _p.exists():
+            _found_dlls.append((str(_p), '.'))
+            break
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=_found_dlls,
     datas=[
         ('VERSION', '.'),           # make VERSION available at runtime
     ],
@@ -15,8 +40,9 @@ a = Analysis(
         'recorder.config',
         'recorder.common',
         'recorder.recorders',
-        'recorder.webcam_recorder',
-        'recorder.screen_recorder',
+        'recorder.core',
+        'recorder.core.webcam',
+        'recorder.core.screen',
         'recorder.ui',
         'recorder.ui.app',
         'recorder.ui.panels',
@@ -64,7 +90,16 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=[
+        # UPX breaks these DLLs — must be left uncompressed
+        'vcruntime140.dll',
+        'vcruntime140_1.dll',
+        'msvcp140.dll',
+        'msvcp140_1.dll',
+        'msvcp140_2.dll',
+        'concrt140.dll',
+        'python3*.dll',
+    ],
     runtime_tmpdir=None,
     console=False,  # No console window (GUI app)
     version='version_info.txt',  # embed Windows version resource

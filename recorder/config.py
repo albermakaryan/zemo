@@ -133,8 +133,10 @@ AUDIO_EXT = ".wav"
 
 # Float button: position (top-right, a bit below top so browser close button stays reachable)
 FLOAT_TOP_OFFSET = 56
-# Softer colors for float button
-FLOAT_START_BG = "#2a3d2a"
-FLOAT_START_FG = "#a8d4a8"
-FLOAT_STOP_BG = "#3d2a2a"
-FLOAT_STOP_FG = "#d4a8a8"
+# Colors for float button:
+# - green-ish when idle (ready to start)
+# - red-ish when recording (stopping)
+FLOAT_START_BG = "#2a3d2a"  # idle circle background (greenish)
+FLOAT_START_FG = "#a8d4a8"  # idle icon
+FLOAT_STOP_BG = "#7a1010"   # recording circle background (reddish)
+FLOAT_STOP_FG = "#ffd6d6"   # recording icon

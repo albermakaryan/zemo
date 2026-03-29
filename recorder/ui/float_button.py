@@ -1,232 +1,174 @@
-"""Floating always-on-top Start/Stop button window (draggable, no title bar)."""
+"""Floating always-on-top Start/Stop button window (PySide, draggable, no title bar)."""
 
-import tkinter as tk
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from recorder import config
 
 
-class FloatButtonWindow(tk.Toplevel):
+class FloatButtonWindow(QtWidgets.QWidget):
     """Always-on-top floating window with one big circular Start/Stop button and countdown."""
 
-    SIZE = 120  # circular button window (width = height)
-    DRAG_HANDLE_H = 20  # height of top drag handle
+    SIZE = 72  # circular button window (width = height)
 
-    def __init__(self, app):
-        super().__init__(app)
-        self._app = app
+    def __init__(self, app_window: QtWidgets.QWidget):
+        super().__init__(None, QtCore.Qt.WindowType.FramelessWindowHint)
+        self._app = app_window
         self._countdown_remaining = 0
-        self._countdown_job = None
-        self.title("Rec")
-        self.configure(bg=config.BG2)
-        self.resizable(False, False)
-        self.attributes("-topmost", True)
-        self.wm_attributes("-topmost", True)
-        self.overrideredirect(True)
+        self._countdown_timer = QtCore.QTimer(self)
+        self._countdown_timer.timeout.connect(self._countdown_tick)
 
-        self._drag_start_x = self._drag_start_y = None
-        self._drag_win_x = self._drag_win_y = None
-        self._drag_moved = False
-        self._drag_threshold = 3  # pixels before we consider it a drag
+        self.setWindowTitle("Rec")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setWindowFlag(QtCore.Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setFixedSize(self.SIZE + 8, self.SIZE + 8)
 
-        # Top drag handle: drag from here never triggers start/stop.
-        # Bind on both Frame and Label so click on label text still starts drag.
-        self._handle = tk.Frame(
-            self,
-            height=self.DRAG_HANDLE_H,
-            bg=config.BG3,
-            cursor="fleur",
-            highlightthickness=0,
-        )
-        self._handle.pack(fill="x")
-        self._handle.pack_propagate(False)
-        for w in (self._handle,):
-            w.bind("<Button-1>", self._on_press_handle)
-            w.bind("<B1-Motion>", self._on_drag)
-            w.bind("<ButtonRelease-1>", lambda e: None)
-        self._handle_lbl = tk.Label(
-            self._handle,
-            text="⋮⋮ drag",
-            font=("Segoe UI", 9),
-            bg=config.BG3,
-            fg=config.FG2,
-            cursor="fleur",
-        )
-        self._handle_lbl.pack(expand=True)
-        self._handle_lbl.bind("<Button-1>", self._on_press_handle)
-        self._handle_lbl.bind("<B1-Motion>", self._on_drag)
-        self._handle_lbl.bind("<ButtonRelease-1>", lambda e: None)
+        self._drag_pos: QtCore.QPoint | None = None
 
-        self._canvas = tk.Canvas(
-            self,
-            width=self.SIZE,
-            height=self.SIZE,
-            bg=config.BG2,
-            highlightthickness=0,
-            cursor="hand2",
-        )
-        self._canvas.pack(padx=4, pady=4)
-        self._canvas.bind("<Button-1>", self._on_press)
-        self._canvas.bind("<B1-Motion>", self._on_drag)
-        self._canvas.bind("<ButtonRelease-1>", self._on_release)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
 
-        r = 4
-        self._oval_id = self._canvas.create_oval(
-            r,
-            r,
-            self.SIZE - r,
-            self.SIZE - r,
-            fill=config.FLOAT_START_BG,
-            outline=config.BORDER,
-            width=2,
+        self._canvas = QtWidgets.QPushButton(self)
+        self._canvas.setCursor(
+            QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         )
-        self._text_id = self._canvas.create_text(
-            self.SIZE // 2,
-            self.SIZE // 2,
-            text="⏺",
-            font=("Segoe UI", 32, "bold"),
-            fill=config.FLOAT_START_FG,
-        )
+        self._canvas.setFlat(True)
+        # Do not allow keyboard focus; only mouse clicks should toggle recording.
+        self._canvas.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._canvas.clicked.connect(self._on_clicked)
+        layout.addWidget(self._canvas)
 
-        self.geometry(f"{self.SIZE + 8}x{self.SIZE + self.DRAG_HANDLE_H + 8}")
-        self.bind("<Button-1>", self._on_press)
-        self.bind("<B1-Motion>", self._on_drag)
-        self.bind("<ButtonRelease-1>", self._on_release_window)
+        self._canvas.installEventFilter(self)
+
+        self._update_button_style(start=True)
         self._place_topright()
-        self._poll()
+
+        self._poll_timer = QtCore.QTimer(self)
+        self._poll_timer.timeout.connect(self._update_ui)
+        self._poll_timer.start(400)
 
     def _place_topright(self):
-        self.update_idletasks()
-        try:
-            sw = self.winfo_screenwidth()
-            self.geometry(f"+{max(0, sw - self.SIZE - 8)}+{config.FLOAT_TOP_OFFSET}")
-        except Exception:
-            self.geometry(f"+100+{config.FLOAT_TOP_OFFSET}")
-
-    def _start_drag(self, e, allow_toggle_on_click=False):
-        """Start drag tracking; if allow_toggle_on_click, release without move will toggle."""
-        self._drag_start_x = e.x_root
-        self._drag_start_y = e.y_root
-        self._drag_win_x = self.winfo_rootx()
-        self._drag_win_y = self.winfo_rooty()
-        self._drag_moved = False
-        self._drag_pressed_on_canvas = allow_toggle_on_click
-        try:
-            self.grab_set()  # keep receiving events when cursor leaves window (Linux/X11)
-        except tk.TclError:
-            pass
-        self._app.bind_all("<B1-Motion>", self._on_drag)
-        self._app.bind_all("<ButtonRelease-1>", self._on_release_anywhere)
-
-    def _on_press_handle(self, e):
-        """Press on drag handle: only drag, never toggle."""
-        self._start_drag(e, allow_toggle_on_click=False)
-
-    def _on_press(self, e):
-        """Press on canvas or window: drag or toggle on release."""
-        self._start_drag(e, allow_toggle_on_click=(e.widget == self._canvas))
-
-    def _on_drag(self, e):
-        if not self.winfo_exists():
+        screen = QtWidgets.QApplication.primaryScreen()
+        if screen is None:
+            self.move(8, config.FLOAT_TOP_OFFSET)
             return
-        dx = e.x_root - self._drag_start_x
-        dy = e.y_root - self._drag_start_y
-        if abs(dx) > self._drag_threshold or abs(dy) > self._drag_threshold:
-            self._drag_moved = True
-        self.geometry(f"+{self._drag_win_x + dx}+{self._drag_win_y + dy}")
-        self.update_idletasks()
-        self._drag_start_x = e.x_root
-        self._drag_start_y = e.y_root
-        self._drag_win_x = self.winfo_rootx()
-        self._drag_win_y = self.winfo_rooty()
+        geo = screen.availableGeometry()
+        x = geo.left() + 8
+        y = config.FLOAT_TOP_OFFSET
+        self.move(x, y)
 
-    def _on_release_anywhere(self, e):
-        try:
-            self.grab_release()
-        except tk.TclError:
-            pass
-        self._app.unbind_all("<B1-Motion>")
-        self._app.unbind_all("<ButtonRelease-1>")
-        if (
-            self.winfo_exists()
-            and self._drag_pressed_on_canvas
-            and not self._drag_moved
-        ):
-            self._toggle()
-        self._drag_start_x = self._drag_start_y = None
+    def eventFilter(self, obj, event):
+        if obj is self._canvas:
+            if event.type() == QtCore.QEvent.Type.Paint:
+                self._paint_button()
+            elif event.type() == QtCore.QEvent.Type.MouseButtonPress:
+                if event.button() == QtCore.Qt.MouseButton.LeftButton:
+                    # Start potential drag, but let QPushButton also handle the click
+                    self._drag_pos = (
+                        event.globalPosition().toPoint()
+                        - self.frameGeometry().topLeft()
+                    )
+                    event.ignore()
+                    return False
+            elif event.type() == QtCore.QEvent.Type.MouseMove:
+                if (
+                    self._drag_pos is not None
+                    and event.buttons() & QtCore.Qt.MouseButton.LeftButton
+                ):
+                    self.move(event.globalPosition().toPoint() - self._drag_pos)
+                    event.accept()
+                    return True
+            elif event.type() == QtCore.QEvent.Type.MouseButtonRelease:
+                self._drag_pos = None
+        return super().eventFilter(obj, event)
 
-    def _on_release(self, e):
-        pass
+    def _paint_button(self):
+        pix = QtGui.QPixmap(self.SIZE, self.SIZE)
+        pix.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pix)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
-    def _on_release_window(self, e):
-        pass
+        rect = pix.rect().adjusted(4, 4, -4, -4)
+        is_recording = self._is_recording()
+        if self._countdown_remaining > 0:
+            fill = QtGui.QColor(config.BG3)
+            text = str(self._countdown_remaining)
+            text_color = QtGui.QColor(config.FG2)
+        elif is_recording:
+            fill = QtGui.QColor(config.FLOAT_STOP_BG)
+            text = "⏹"
+            text_color = QtGui.QColor(config.FLOAT_STOP_FG)
+        else:
+            fill = QtGui.QColor(config.FLOAT_START_BG)
+            text = "⏺"
+            text_color = QtGui.QColor(config.FLOAT_START_FG)
 
-    def _is_counting_down(self):
+        pen = QtGui.QPen(QtGui.QColor(config.BORDER))
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.setBrush(fill)
+        painter.drawEllipse(rect)
+
+        painter.setPen(text_color)
+        font = QtGui.QFont("Segoe UI", 20, QtGui.QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
+        painter.end()
+
+        self._canvas.setIcon(QtGui.QIcon(pix))
+        self._canvas.setIconSize(pix.size())
+
+    def _update_button_style(self, start: bool):
+        self._paint_button()
+
+    def _is_counting_down(self) -> bool:
         return self._countdown_remaining > 0
 
-    def _is_recording(self):
+    def _is_recording(self) -> bool:
         a = self._app
-        w = getattr(a._webcam_panel, "recorder", None)
-        s = getattr(a._screen_panel, "recorder", None)
-        return (w and getattr(w, "recording", False)) or (
-            s and getattr(s, "recording", False)
-        )
+        w = getattr(a, "_webcam_panel", None)
+        s = getattr(a, "_screen_panel", None)
+        w_rec = getattr(getattr(w, "recorder", None), "recording", False) if w else False
+        s_rec = getattr(getattr(s, "recorder", None), "recording", False) if s else False
+        return bool(w_rec or s_rec)
 
-    def _toggle(self):
+    def _on_clicked(self):
         if self._is_recording():
-            self._app._stop_both()
-            self._update_ui()
+            dlg = QtWidgets.QMessageBox(self)
+            dlg.setWindowTitle("Stop recording?")
+            dlg.setText("Do you want to stop the recording?")
+            dlg.setStandardButtons(
+                QtWidgets.QMessageBox.StandardButton.Yes
+                | QtWidgets.QMessageBox.StandardButton.No
+            )
+            dlg.setDefaultButton(QtWidgets.QMessageBox.StandardButton.No)
+            if dlg.exec() == QtWidgets.QMessageBox.StandardButton.Yes:
+                self._app.stop_both()
+                self._update_ui()
+            return
         elif not self._is_counting_down():
-            # Email only when user clicks small button to start recording
             if not self._app.get_recording_email():
                 return
-            # Minimize preview window so only the small start/stop button is visible
-            self._app.iconify()
-            self.lift()
-            self.attributes("-topmost", True)
+            self._app.showMinimized()
+            self.raise_()
+            self.activateWindow()
             self._start_countdown()
 
     def _start_countdown(self):
         self._countdown_remaining = config.COUNTDOWN_SECONDS
-        self._canvas.config(cursor="")
-        self._canvas.itemconfig(self._oval_id, fill=config.BG3)
-        self._canvas.itemconfig(
-            self._text_id, text=str(self._countdown_remaining), fill=config.FG2
-        )
-        self._countdown_tick()
+        self._countdown_timer.start(1000)
+        self._update_ui()
 
     def _countdown_tick(self):
-        if self._countdown_job:
-            self.after_cancel(self._countdown_job)
-            self._countdown_job = None
-        if not self.winfo_exists():
-            return
-        if self._countdown_remaining <= 0:
-            self._canvas.config(cursor="hand2")
-            self._saved_x, self._saved_y = self.winfo_rootx(), self.winfo_rooty()
-            self._app._record_both()
-            self._update_ui()
-            self.geometry(f"+{self._saved_x}+{self._saved_y}")
-            return
-        self._canvas.itemconfig(self._text_id, text=str(self._countdown_remaining))
         self._countdown_remaining -= 1
-        self._countdown_job = self.after(1000, self._countdown_tick)
+        if self._countdown_remaining <= 0:
+            self._countdown_remaining = 0
+            self._countdown_timer.stop()
+            saved_pos = self.pos()
+            self._app.record_both()
+            self._update_ui()
+            self.move(saved_pos)
+            return
+        self._update_ui()
 
     def _update_ui(self):
-        if self._countdown_job:
-            return
-        x, y = self.winfo_rootx(), self.winfo_rooty()
-        if self._is_recording():
-            self._canvas.itemconfig(self._oval_id, fill=config.FLOAT_STOP_BG)
-            self._canvas.itemconfig(self._text_id, text="⏹", fill=config.FLOAT_STOP_FG)
-        else:
-            self._canvas.itemconfig(self._oval_id, fill=config.FLOAT_START_BG)
-            self._canvas.itemconfig(self._text_id, text="⏺", fill=config.FLOAT_START_FG)
-        self.geometry(f"+{x}+{y}")
-
-    def _poll(self):
-        try:
-            if self.winfo_exists() and not self._is_counting_down():
-                self._update_ui()
-            self.after(400, self._poll)
-        except tk.TclError:
-            pass
+        self._paint_button()
