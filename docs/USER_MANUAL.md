@@ -166,4 +166,109 @@ Save location can always be changed from the app with the 📁 button.
 
 ---
 
+## 10. Recording Flow (Code Reference)
+
+This section describes exactly what happens under the hood when you press Record, with links to the relevant source files.
+
+---
+
+### 10.1 Overview
+
+```
+User presses Record
+  └─ RecordingMixin.record_both()          _recording_mixin.py
+       ├─ threading.Barrier (sync t0)
+       ├─ WebcamRecorderCore thread         webcam.py
+       │    cap.read() → out.write()  [MP4]
+       │    └─ overlay_callback            ← gaze hook fires here
+       │         EyeTracker.track_eyes()
+       │         csv.writerow()       [CSV]
+       ├─ ScreenRecorderCore thread         screen.py
+       │    dxcam / mss grab → out.write() [MP4]
+       └─ InternalAudioRecorder thread      audio/
+            → WAV
+            └─ ffmpeg mux → screen_with_audio.mp4
+```
+
+---
+
+### 10.2 Step-by-step
+
+#### Step 1 – `record_both` kicks everything off
+
+**File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → `RecordingMixin.record_both()`
+
+1. Checks whether the gaze model is present (if gaze is enabled). If not, prompts the user to calibrate or continue without gaze.
+2. Asks for the user's email if not already set — the email is embedded in every output filename.
+3. Creates a `threading.Barrier` shared by all recorders (webcam + screen + optionally audio). All threads call `barrier.wait()` before writing their first frame, ensuring every stream starts from the same wall-clock `t0`.
+
+#### Step 2 – Webcam capture loop
+
+**File:** [`recorder/core/webcam.py`](../recorder/core/webcam.py) → `WebcamRecorderCore._run()`
+
+- Opens the camera with `cv2.VideoCapture`. On Windows it tries **DirectShow** first, then **MSMF**, then the default backend.
+- Retries up to 6 times (1 s apart) so the camera has time to be released by other processes (e.g. after gaze calibration).
+- Reads frames in a tight loop. When `next_write_time` is reached, the frame is written to an MP4 with `cv2.VideoWriter`.
+- After the stop signal, the `finally` block pads any missing frames with the last captured frame to keep the video duration accurate.
+- If an `_overlay_callback` is registered, it is called on every frame — this is the gaze hook (see Step 4).
+
+#### Step 3 – Screen capture loop
+
+**File:** [`recorder/core/screen.py`](../recorder/core/screen.py) → `ScreenRecorderCore._run()`
+
+Two backends, tried in order:
+
+| Backend | When used | How |
+|---------|-----------|-----|
+| **dxcam** (`dxcam_cpp` or `dxcam`) | Windows, GPU-accelerated | `camera.get_latest_frame()` at target FPS |
+| **mss** | Fallback (all platforms) | `sct.grab(monitor)` → `cv2.cvtColor` BGRA→BGR |
+
+Both write frames to an MP4 via `cv2.VideoWriter` at the configured `FPS`, and pad missing frames in their `finally` blocks just like the webcam recorder.
+
+#### Step 4 – Gaze tracking & CSV save
+
+**File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → `record_both()` gaze block
+
+Once the webcam recorder is running, a callback `_gaze_cb` is attached via `webcam_recorder.set_overlay_callback(...)`. On every webcam frame:
+
+1. `EyeTracker.track_eyes(frame)` returns the `(x, y)` gaze coordinate.
+2. The timestamp is expressed as `(minute, second)` relative to recording start.
+3. One row is appended to a CSV at `recordings/gaze/<email>_gaze.csv`:
+
+```
+video_id, frame_id, minute, second, x, y
+```
+
+When recording stops, `_flush_gaze_csv()` closes and flushes the file.
+
+#### Step 5 – Audio recording (Windows only)
+
+**File:** [`recorder/audio/`](../recorder/audio/)
+
+An `InternalAudioRecorder` captures **system loopback audio** (what you hear) and saves it as a WAV file. After all recorders stop, `_dispatch_mux()` calls ffmpeg to mux the screen video and audio WAV into a single `screen_with_audio.mp4` placed in `recordings/screen_with_audio/`.
+
+#### Step 6 – Synchronized stop
+
+**File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → `RecordingMixin.stop_both()`
+
+1. Captures a single `stop_time = time.time()` and passes it to every recorder's `.stop()` call so they all share the same intended end time.
+2. Joins webcam, screen, and audio threads in parallel (`_join_recorders_concurrent`) so the UI doesn't block.
+3. Detaches the gaze overlay callback only *after* the webcam thread fully finishes (including padding frames).
+4. Calls `_flush_gaze_csv()` to close the CSV.
+5. Kicks off the ffmpeg mux in a background thread if audio is present.
+
+---
+
+### 10.3 Key source files
+
+| File | Responsibility |
+|------|---------------|
+| [`recorder/core/webcam.py`](../recorder/core/webcam.py) | Camera open, frame capture loop, MP4 write, gaze hook |
+| [`recorder/core/screen.py`](../recorder/core/screen.py) | Screen grab (dxcam / mss), MP4 write |
+| [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) | Orchestration: barrier sync, gaze CSV, stop, mux dispatch |
+| [`recorder/audio/`](../recorder/audio/) | Loopback audio capture, ffmpeg mux |
+| [`recorder/config.py`](../recorder/config.py) | FPS, paths, camera index, monitor index, flip settings |
+
+---
+
 *Recorder – Screen & Webcam Recorder*
