@@ -12,6 +12,7 @@ from PySide6 import QtCore
 from recorder import config
 from recorder.audio import InternalAudioRecorder, is_loopback_available
 from recorder.audio import mux_audio_into_video as muxmod
+from recorder.common import unique_name_with_suffix
 from recorder.ui.dialogs import ask_university_email
 from gazer import EyeTracker
 
@@ -92,17 +93,28 @@ class RecordingMixin:
                 webcam_recorder = getattr(self._webcam_panel, "recorder", None)
                 gaze_dir = config.RECORDINGS_DIR / config.GAZE_SUBDIR
                 gaze_dir.mkdir(parents=True, exist_ok=True)
-                csv_path = gaze_dir / (email + "_gaze.csv")
+                # Derive video_id from the webcam file already chosen (e.g. "alber@gmail.com_1")
+                # so gaze CSV name and video_id column both carry the same counter.
+                if webcam_recorder and webcam_recorder.filename:
+                    webcam_stem = Path(webcam_recorder.filename).stem  # "alber@gmail.com_1_webcam"
+                    video_id = webcam_stem[: webcam_stem.rfind("_webcam")]  # "alber@gmail.com_1"
+                else:
+                    video_id = email
+                csv_path = gaze_dir / f"{video_id}_gaze.csv"
                 self._gaze_csv_file = open(csv_path, "w", newline="")
                 self._gaze_csv_writer = csv.writer(self._gaze_csv_file)
                 self._gaze_csv_writer.writerow(["video_id", "frame_id", "minute", "second", "x", "y"])
                 frame_counter = [0]
                 start_elapsed = [None]
-                video_id = email  # just the email, not the full filename stem
+                last_gaze = [None, None]
 
-                def _gaze_cb(frame, elapsed, is_recording):
+                def _gaze_cb(frame, elapsed, is_recording, is_padding=False):
                     if is_recording and self._gaze_csv_writer is not None:
-                        x, y = self._eye_tracker.track_eyes(frame)
+                        if not is_padding:
+                            x, y = self._eye_tracker.track_eyes(frame)
+                            last_gaze[0], last_gaze[1] = x, y
+                        else:
+                            x, y = last_gaze[0], last_gaze[1]
                         if start_elapsed[0] is None:
                             start_elapsed[0] = elapsed
                         relative = int(elapsed - start_elapsed[0])
