@@ -14,8 +14,11 @@ from ._recording_mixin import RecordingMixin
 class App(UIMixin, RecordingMixin, QtWidgets.QMainWindow):
     """Main recorder application window."""
 
+    _calibration_finished = QtCore.Signal()
+
     def __init__(self, auto_mux: bool = True, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
+        self._calibration_finished.connect(self._on_calibration_done)
         self.setWindowTitle(f"Recorder v{__version__}")
         self.setObjectName("MainWindow")
         self.setStyleSheet(

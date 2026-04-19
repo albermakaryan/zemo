@@ -146,6 +146,9 @@ class FloatButtonWindow(QtWidgets.QWidget):
                 self._update_ui()
             return
         elif not self._is_counting_down():
+            if hasattr(self._app, "_gaze_ready_or_prompt"):
+                if not self._app._gaze_ready_or_prompt():
+                    return
             if not self._app.get_recording_email():
                 return
             self._app.showMinimized()

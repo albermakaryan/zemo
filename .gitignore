@@ -30,3 +30,4 @@ uv.lock
 # Other virtualenv names
 .venv/
 venv/
+*.pkl

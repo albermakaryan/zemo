@@ -7,9 +7,10 @@ Desktop app to record screen and/or webcam as MP4, with a floating movable start
 - **Screen** and **webcam** recording (separate or both at once, synced)
 - **System audio**: Windows via WASAPI (PyAudioWPatch); Linux via PulseAudio/PipeWire monitor (sounddevice)
 - **MP4** video output for webcam and screen
+- **Gaze tracking**: per-frame eye-gaze estimation via eyetrax; saved as a CSV alongside recordings
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
-- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, and `recordings/audio/`
+- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, `recordings/audio/`, and `recordings/gaze/`
 
 ## Requirements
 
@@ -66,6 +67,37 @@ The WASAPI callback itself never touches disk — all writes go through a bounde
   - ffmpeg combines the screen MP4 and audio file (`.mka` preferred over `.wav`) by PTS alignment, re-encodes audio to AAC 192k.
   - Final file: `recordings/screen_with_audio/<email>_screen_with_audio.mp4`.
 
+## Gaze tracking
+
+Gaze tracking uses [eyetrax](https://github.com/) to estimate where on screen the participant is looking during webcam recording.
+
+### Setup
+
+1. Click **Calibrate Eyes** in the bottom bar. A full-screen Lissajous calibration window will open.
+2. Follow the on-screen target with your eyes until calibration completes.
+3. The model is saved to `gaze_model.pkl` next to the app. The button changes to **Re-calibrate Eyes**.
+
+### During recording
+
+- Enable/disable gaze tracking via **⚙ Settings → Enable** checkbox (on by default).
+- The **`+ gaze`** indicator in the bottom bar (green) confirms it is active.
+- If gaze is enabled but no model file exists when you click Start, a popup offers to continue without gaze tracking.
+
+### Output
+
+Each recording session produces `recordings/gaze/<email>_gaze.csv` with columns:
+
+| Column | Description |
+|---|---|
+| `video_id` | User email |
+| `frame_id` | 0-based frame counter (only increments on successful gaze detections) |
+| `minute` | Integer minutes since first gaze frame |
+| `second` | Integer seconds within the current minute |
+| `x` | Estimated screen X coordinate |
+| `y` | Estimated screen Y coordinate |
+
+Blink or no-face frames produce no row.
+
 ## Build a standalone .exe (Windows)
 
 1. Install dependencies and run the app at least once: `pip install -r requirements.txt`
@@ -92,6 +124,7 @@ zemo/
 ├── main.py              # Entry point (dependency check + launch)
 ├── run_recorder.bat     # Windows launcher
 ├── run_recorder.sh      # Linux/macOS launcher
+├── gaze_model.pkl       # Saved gaze calibration model (created on first calibration)
 ├── requirements.txt
 ├── pyproject.toml
 ├── recorder/            # Package
@@ -100,10 +133,12 @@ zemo/
 │   ├── ui/              # App, panels, float button (Qt UI layer)
 │   ├── core/            # Core recording logic (webcam/screen), no UI
 │   ├── audio/           # Internal (system) audio recorder (Windows + Linux backends)
+├── gazer/               # Gaze tracking package (EyeTracker wrapping eyetrax)
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
     ├── screen/          # Screen MP4s
     ├── audio/           # System audio .mka (PyAV) or .wav (fallback)
+    ├── gaze/            # Gaze CSVs (<email>_gaze.csv)
     └── screen_with_audio/  # Muxed screen + audio MP4s
 ```
 
@@ -126,7 +161,8 @@ Play a video in the browser while it runs; the WAV should contain that audio. Li
 ## Configuration
 
 - **Countdown length:** edit `COUNTDOWN_SECONDS` in `recorder/config.py`.
-- **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, and `audio/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
+- **Gaze model path:** edit `GAZE_ESTIMATOR_PATH` in `recorder/config.py` (default: `gaze_model.pkl` next to the app).
+- **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, `audio/`, and `gaze/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
 
 ## License
 

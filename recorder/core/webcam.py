@@ -142,12 +142,21 @@ class WebcamRecorderCore:
             if i not in indices_to_try:
                 indices_to_try.append(i)
         api_name = ""
-        for idx in indices_to_try:
-            cap, api_name = _try_open_capture(idx)
+
+        # Retry opening the camera: handles the case where it was just released
+        # by another process (e.g. eyetrax calibration) and isn't immediately available.
+        for attempt in range(6):
+            for idx in indices_to_try:
+                cap, api_name = _try_open_capture(idx)
+                if cap is not None and cap.isOpened():
+                    break
+                cap = None
+                api_name = ""
             if cap is not None and cap.isOpened():
                 break
-            cap = None
-            api_name = ""
+            if attempt < 5:
+                time.sleep(1.0)
+
         if cap is None or not cap.isOpened():
             self.on_status(
                 "error",
