@@ -290,6 +290,10 @@ class RecordingMixin:
         self._btn_calibrate.setEnabled(False)
         self._btn_calibrate.setText("Calibrating…")
 
+        float_win = getattr(self, "_float_win", None)
+        if float_win is not None:
+            float_win.hide()
+
         # Stop the webcam recorder so its VideoCapture releases the camera
         # before eyetrax opens its own capture for calibration.
         webcam_panel = getattr(self, "_webcam_panel", None)
@@ -339,6 +343,10 @@ class RecordingMixin:
         else:
             self._chk_gaze.setToolTip("Calibrate first to enable gaze tracking")
         self._update_gaze_indicator(self._chk_gaze.isChecked())
+
+        float_win = getattr(self, "_float_win", None)
+        if float_win is not None:
+            float_win.show()
 
     # ------------------------------------------------------------------
     # Mux dispatch (frozen exe vs. plain Python)
