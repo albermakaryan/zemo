@@ -180,7 +180,7 @@ User presses Record
        ├─ threading.Barrier (sync t0)
        ├─ WebcamRecorderCore thread         webcam.py
        │    cap.read() → out.write()  [MP4]
-       │    └─ overlay_callback            ← gaze hook fires here
+       │    └─ on_frame_written            ← gaze hook (after each out.write)
        │         EyeTracker.track_eyes()
        │         csv.writerow()       [CSV]
        ├─ ScreenRecorderCore thread         screen.py
@@ -210,7 +210,7 @@ User presses Record
 - Retries up to 6 times (1 s apart) so the camera has time to be released by other processes (e.g. after gaze calibration).
 - Reads frames in a tight loop. When `next_write_time` is reached, the frame is written to an MP4 with `cv2.VideoWriter`.
 - After the stop signal, the `finally` block pads any missing frames with the last captured frame to keep the video duration accurate.
-- If an `_overlay_callback` is registered, it is called on every frame — this is the gaze hook (see Step 4).
+- If `set_on_frame_written` is registered, it is called immediately after each `out.write` (same count as MP4 frames) — this is the gaze hook (see Step 4).
 
 #### Step 3 – Screen capture loop
 
@@ -229,7 +229,7 @@ Both write frames to an MP4 via `cv2.VideoWriter` at the configured `FPS`, and p
 
 **File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → `record_both()` gaze block
 
-Once the webcam recorder is running, a callback `_gaze_cb` is attached via `webcam_recorder.set_overlay_callback(...)`. On every webcam frame:
+Before recording starts, a callback `_gaze_on_frame_written` is attached via `webcam_recorder.set_on_frame_written(...)`. It runs once per encoded webcam frame (immediately after each `out.write`), including padding frames at shutdown:
 
 1. `EyeTracker.track_eyes(frame)` returns the `(x, y)` gaze coordinate.
 2. The timestamp is expressed as `(minute, second)` relative to recording start.
@@ -253,7 +253,7 @@ An `InternalAudioRecorder` captures **system loopback audio** (what you hear) an
 
 1. Captures a single `stop_time = time.time()` and passes it to every recorder's `.stop()` call so they all share the same intended end time.
 2. Joins webcam, screen, and audio threads in parallel (`_join_recorders_concurrent`) so the UI doesn't block.
-3. Detaches the gaze overlay callback only *after* the webcam thread fully finishes (including padding frames).
+3. Clears `set_on_frame_written` only *after* the webcam thread fully finishes (including padding frames).
 4. Calls `_flush_gaze_csv()` to close the CSV.
 5. Kicks off the ffmpeg mux in a background thread if audio is present.
 
