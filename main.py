@@ -41,7 +41,17 @@ def _dll_loadable(name: str) -> bool:
 
 
 if sys.platform == "win32":
+    import os
+
     _check_vcredist()
+    # When the parent (e.g. Windows Terminal) already set DPI awareness, Qt's
+    # SetProcessDpiAwarenessContext for V2 can log ACCESS_DENIED; scaling still works.
+    _rule = "qt.qpa.window=false"
+    _existing = os.environ.get("QT_LOGGING_RULES", "").strip()
+    if _rule not in _existing:
+        os.environ["QT_LOGGING_RULES"] = (
+            f"{_existing};{_rule}" if _existing else _rule
+        )
 
 from PySide6 import QtWidgets
 

@@ -157,6 +157,13 @@ class WebcamRecorderCore:
 
         flip_h = _effective_horizontal_flip(api_name)
 
+        pw = getattr(config, "WEBCAM_PREFERRED_WIDTH", None)
+        ph = getattr(config, "WEBCAM_PREFERRED_HEIGHT", None)
+        if pw is not None and ph is not None:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(pw))
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(ph))
+            # Dummy read so backends (e.g. MSMF) apply the new mode before we read geometry.
+            cap.read()
         src_w = make_even(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
         src_h = make_even(int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
         if config.RECORDING_WIDTH is not None and config.RECORDING_HEIGHT is not None:
