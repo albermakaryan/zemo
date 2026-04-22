@@ -4,6 +4,7 @@ Configuration and constants for the recorder app.
 
 import sys
 from pathlib import Path
+import pyautogui as pg
 
 # Project root: when frozen (PyInstaller exe), use the folder containing the exe
 if getattr(sys, "frozen", False):
@@ -123,6 +124,10 @@ MONITOR_INDEX = 1
 # Webcam horizontal flip (mirror left ↔ right in the image so e.g. text and your raised hand match real life).
 # - True: always flip  - False: never  - "auto": use heuristics in recorder.core.webcam (Windows on by default there).
 WEBCAM_FLIP_HORIZONTAL = "auto"
+# Requested capture resolution after opening the camera. The driver picks the closest supported mode
+# (e.g. 1280×720 if 1080p is unavailable). None = leave default (often 640×480 on Windows).
+WEBCAM_PREFERRED_WIDTH = pg.size().width
+WEBCAM_PREFERRED_HEIGHT = pg.size().height
 # Use mp4v first (no extra DLLs). H.264 needs OpenH264 on Windows and often fails.
 VIDEO_FOURCC_TRY_ORDER = ("mp4v",)
 COUNTDOWN_SECONDS = 5
