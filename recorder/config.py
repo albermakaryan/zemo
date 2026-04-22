@@ -111,7 +111,16 @@ def sans_font():
 # ─── Recording ────────────────────────────────────────────────────────────────
 PREVIEW_W = 400
 PREVIEW_H = 225
-FPS = 25
+# Target output FPS: `FPS` is the value used at import time, then it is *replaced* on app startup
+# by the last value from Settings (QSettings) if present. The file value is only the default
+# for a brand-new install. Use DEFAULT_FPS for that baseline everywhere (do not read FPS before load).
+DEFAULT_FPS = 15
+FPS = DEFAULT_FPS
+FPS_MIN = 5
+FPS_MAX = 30
+# QSettings namespace for the Settings dialog and startup load.
+QSETTINGS_ORG = "Zemo"
+QSETTINGS_APP = "Recorder"
 VIDEO_EXT = ".mp4"
 # Webcam uses the camera's native resolution (often 640x480 or 720p). Screen uses full monitor
 # resolution (e.g. 1920x1080), so screen recordings are usually larger. Set both below to force
