@@ -312,10 +312,15 @@ class RecordingMixin:
                 # On Windows, OpenCV GUI calls hang when called from a non-main thread
                 # (they wait for Win32 messages that never arrive), so a subprocess is
                 # the only reliable way to run the calibration window from here.
-                cmd = [
-                    sys.executable, "-c",
-                    "from gazer import EyeTracker; EyeTracker.calibrate_and_create()",
-                ]
+                # PyInstaller: sys.executable is the .exe — ``-c`` is ignored, spawns a second GUI.
+                if getattr(sys, "frozen", False):
+                    cmd = [sys.executable, "--calibrate-only"]
+                else:
+                    cmd = [
+                        sys.executable,
+                        "-c",
+                        "from gazer import EyeTracker; EyeTracker.calibrate_and_create()",
+                    ]
                 subprocess.run(cmd, check=False, cwd=str(config.PROJECT_ROOT))
             except Exception as exc:
                 print(f"Calibration failed: {exc}")

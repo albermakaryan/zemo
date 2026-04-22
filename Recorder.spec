@@ -4,6 +4,17 @@
 import os
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+
+# eyetrax loads submodules lazily (__getattr__). PyInstaller will miss e.g. gaze,
+# calibration, … unless we bundle the whole package. This is only the eyetrax
+# wheel — not other dependencies.
+_eyetrax_submodules = collect_submodules("eyetrax")
+_eyetrax_data = collect_data_files("eyetrax")
+
+# eyetrax → MediaPipe Tasks (FaceLandmarker). Needs .pyd/DLLs + mediapipe.tasks.c etc.
+_mp_datas, _mp_binaries, _mp_hidden = collect_all("mediapipe")
+
 block_cipher = None
 
 # Bundle VC++ 2015-2022 runtime DLLs so the exe works on machines that don't
@@ -31,10 +42,10 @@ for _dll in _vcredist_names:
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=_found_dlls,
+    binaries=_found_dlls + _mp_binaries,
     datas=[
         ('VERSION', '.'),           # make VERSION available at runtime
-    ],
+    ] + _eyetrax_data + _mp_datas,
     hiddenimports=[
         'recorder',
         'recorder.config',
@@ -65,7 +76,7 @@ a = Analysis(
         'PIL.Image',
         'PIL.ImageTk',
         'imageio_ffmpeg',
-    ],
+    ] + _eyetrax_submodules + _mp_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
