@@ -79,9 +79,10 @@ Gaze tracking uses [eyetrax](https://github.com/) to estimate where on screen th
 
 ### During recording
 
-- Enable/disable gaze tracking via **⚙ Settings → Enable** checkbox (on by default).
-- The **`+ gaze`** indicator in the bottom bar (green) confirms it is active.
-- If gaze is enabled but no model file exists when you click Start, a popup offers to continue without gaze tracking.
+- Enable/disable gaze tracking via **⚙** (gear) in the top bar, then the **Enable** checkbox in the panel (on by default).
+- The **`+ gaze`** indicator in the bottom bar (green) reflects the setting.
+- If gaze is enabled but no calibration file exists when you start recording, a popup lets you **continue without gaze** (gaze is turned off for that session) or **cancel** to calibrate first. The start controls stay available so that flow is never blocked.
+- After the countdown, loading the gaze stack (MediaPipe) can take a few seconds; the float button may show **⏳** while that runs on a background thread so the UI stays responsive.
 
 ### Output
 
@@ -104,7 +105,19 @@ Blink or no-face frames produce no row.
 2. From the project root, run **`build_exe.bat`** (double-click or from a terminal).
 3. The executable is created at **`dist\Recorder_<version>.exe`** (for example `Recorder_1.2.3.exe`).
 
-When you run `build_exe.bat`:
+### Test build (no version bump)
+
+To verify the build without changing **`VERSION`**, **`version_info.txt`**, or the versioned `dist\Recorder_<ver>.exe` name:
+
+```bat
+build_exe.bat --test
+```
+
+(You can also pass `test` without dashes.) The script reads the current `VERSION` as-is, does not rewrite that file, keeps an existing `version_info.txt` if present, and copies the result to **`dist\Recorder_test.exe`**. Use this for local QA; use a normal `build_exe.bat` run for release builds.
+
+### Normal release build
+
+When you run `build_exe.bat` **without** `--test`:
 
 - **Version source of truth** is the `VERSION` file in the project root.
 - The script bumps the version **automatically** and writes it back to `VERSION`:
@@ -115,7 +128,9 @@ When you run `build_exe.bat`:
 - It then runs `python build_version_info.py <version>` to regenerate `version_info.txt` so the Windows file properties match.
 - Finally it builds using `Recorder.spec` and copies `dist\Recorder.exe` to `dist\Recorder_<version>.exe`.
 
-The app window title shows the current version (e.g. `Recorder v1.2.4`). You can copy `Recorder_<version>.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, and `audio/` inside) for saving videos. No Python installation needed on that machine.
+**Frozen .exe and gaze:** The PyInstaller one-file layout includes a small runtime hook (`gazer/pyi_rth_eyetrax.py`) so eyetrax can load its gaze model modules inside the bundle. Calibration from the **Calibrate** button uses `Recorder.exe --calibrate-only` in the frozen build (see `main.py`).
+
+The app window title shows the current version (e.g. `Recorder v1.2.4`). You can copy `Recorder_<version>.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, `audio/`, and `gaze/` as needed) for saving files. No Python installation needed on that machine.
 
 ## Project layout
 

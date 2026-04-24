@@ -14,9 +14,9 @@ Screen & Webcam Recorder: record your screen and webcam as separate MP4 files, w
 **UI at a glance**
 - **Main window**: two preview panels (webcam + screen), live only—nothing is recorded until you start.
 - **Floating button** (round, usually top‑right): always on top; drag to move (e.g. to another monitor).
-- **To start recording:** click the floating button → enter your **email** in the dialog → Submit → main window minimizes → **5‑second countdown** on the button → recording starts (webcam + screen + audio if available).
+- **To start recording:** click the floating button → if **gaze** is on but you have not calibrated, a popup may offer **continue without gaze** or **cancel** → enter your **email** in the dialog (if not already set) → main window minimizes → **countdown** (default 5 seconds) on the button → if gaze is enabled, the button may briefly show **⏳** while the gaze model loads, then **recording** starts (webcam + screen + audio if available).
 - **To stop:** click the floating button again (it shows ⏹); files are saved automatically.
-- **Main window (when open):** 📁 = change save folder; ▶ Play = open last recording; ⏹ Stop Both = stop all.
+- **Main window (when open):** **⚙** opens gaze/settings; **⏺ Record Both** = same recording start path as the float (top bar is disabled while a countdown is running or right after you press start, to avoid double-starts). 📁 = change save folder; ▶ Play = open last recording; ⏹ Stop Both = stop all.
 
 ---
 
@@ -24,14 +24,14 @@ Screen & Webcam Recorder: record your screen and webcam as separate MP4 files, w
 
 - **Webcam**: records your camera (e.g. face) as MP4.
 - **Screen**: records your monitor (full screen or primary display) as MP4.
-- **Audio** (Windows): records **system/computer audio** (what you hear) when available; saved as WAV and can be mixed into videos with a separate tool.
+- **Audio** (Windows): records **system/computer audio** (what you hear) when available; typically **`.mka`** (Matroska audio) when PyAV is installed, else **`.wav`**; can be muxed into the screen video with ffmpeg (see main README).
 - Recordings are **synced** (webcam and screen start/stop together) and saved with your **email** in the filename (e.g. `user@example.com_webcam.mp4`).
 
 ---
 
 ## 2. Requirements
 
-- **Python 3.7+** (for running from source), or use the standalone **Recorder.exe** (no Python needed).
+- **Python 3.12+** (for running from source; see `pyproject.toml`), or use the standalone **Recorder.exe** (no Python needed).
 - **Windows** is the main supported platform.
 - **FFmpeg** (optional): for mixing audio into video; if not installed, videos are saved without embedded system audio.
 
@@ -77,14 +77,15 @@ Use the previews to check the picture and adjust the camera if needed. Nothing i
 
 ### 5.2 Starting a recording
 
-1. Click the **floating button** (⏺).
-2. An **email** dialog appears. Enter your email (e.g. university or work) and click **Submit**.
+1. Click the **floating button** (⏺) or **⏺ Record Both** in the top bar.
+2. If **Gaze** is enabled in **⚙** settings but you have not calibrated, a **popup** appears: you can **continue without gaze** (gaze is turned off for that attempt) or **cancel** to calibrate first. You are **not** blocked from starting; this matches the “missing model” case.
+3. An **email** dialog appears if you have not set an email this session. Enter your email and confirm.
    - This email is used in the filenames of the saved videos.
    - If you cancel the dialog, no recording is started.
-3. After you submit:
-   - The **main window minimizes** (only the small button remains visible).
-   - A **5‑second countdown** runs on the button (5, 4, 3, 2, 1).
-   - When the countdown reaches zero, **recording starts** (webcam + screen, and system audio if available).
+4. After a successful email step:
+   - The **main window minimizes** (only the small button remains visible when using the float).
+   - A **countdown** runs on the button (default 5 seconds; configurable in `config.py`).
+   - When the countdown finishes, if gaze is enabled, the button may show **⏳** for a few seconds while the gaze model loads (this work runs off the main UI thread so the app stays responsive), then **recording starts** (webcam + screen, and system audio if available).
 
 You can move the floating button by dragging it (e.g. to another monitor).
 
@@ -107,13 +108,19 @@ Inside **`recordings`** you will find:
 |----------|----------------------------------------------|
 | `webcam/`| Webcam MP4 files (e.g. `user@example.com_webcam.mp4`) |
 | `screen/`| Screen MP4 files (e.g. `user@example.com_screen.mp4`) |
-| `audio/` | System audio WAV files (e.g. `user@example.com_audio.wav`) |
+| `audio/` | System audio (often `.mka` with PyAV, or `.wav` fallback) |
+| `gaze/`  | Gaze CSV files when gaze tracking is used (see main README) |
 
 You can change the **save location** using the **📁** button in the main window (before or after recording). The folder you choose will contain `webcam/`, `screen/`, and `audio/` subfolders.
 
-### 5.5 Main window (when not minimized)
+### 5.5 Gaze and settings (optional)
 
-- **⏺ Record Both** – start recording from the main window (will ask for email if not set, then start with countdown if using the float button flow).
+- Open **⚙** in the top bar to show the **Gaze** strip: **Enable** toggles gaze for the next recording, **Calibrate eyes** (or **Re-calibrate**) runs full-screen calibration in a subprocess (the webcam preview is released first). The saved model is `gaze_model.pkl` next to the app.
+- Gaze is **on by default** in the UI; you can still start recording if no model is present, using the **continue without gaze** option when prompted.
+
+### 5.6 Main window (when not minimized)
+
+- **⏺ Record Both** – start recording (same flow as the float: gaze prompt if needed, then email, then countdown). Temporarily **disabled** while a countdown is active or just after you press start, to avoid a duplicate start.
 - **⏹ Stop Both** – stop all recordings.
 - **📁** – choose the base folder for recordings.
 - **▶ Play** – open the last recorded file (per panel).
@@ -155,14 +162,17 @@ Save location can always be changed from the app with the 📁 button.
 | No system audio | System/loopback audio is Windows-only and may require correct playback device; see `recorder/audio/README.md` for details. |
 | Recordings in wrong place | Use the 📁 button in the main window to set the base folder for `webcam/`, `screen/`, and `audio/`. |
 | App does not exit cleanly | Use the window X button or Ctrl+C once; the app will stop recorders and exit. |
+| Gaze calibration fails in the built `.exe` | Ensure you built with the current `Recorder.spec` (includes the eyetrax runtime hook). Rebuild with `build_exe.bat` or `build_exe.bat --test`. |
+| UI freezes on “1” in the countdown | Should not occur in current versions: gaze loading runs off the main thread. Update to the latest `main` and rebuild. |
 
 ---
 
 ## 9. Building the .exe (for developers)
 
 1. Install dependencies: `pip install -r requirements.txt`
-2. Run **`build_exe.bat`** (or `pyinstaller --clean Recorder.spec`)
-3. Output: **`dist\Recorder.exe`**. Version is read from **`VERSION`** (e.g. `1.0.0`); the batch also copies the exe to **`dist\Recorder_<version>.exe`**
+2. **Release build:** run **`build_exe.bat`** (or `pyinstaller --clean Recorder.spec`). The batch bumps **`VERSION`**, regenerates **`version_info.txt`**, and copies the build to **`dist\Recorder_<version>.exe`**. Output is also at **`dist\Recorder.exe`**.
+
+3. **Test build (no version bump):** `build_exe.bat --test` — leaves **`VERSION`** and an existing **`version_info.txt`** unchanged, and copies to **`dist\Recorder_test.exe`**. Use to verify the frozen app without affecting release version files.
 
 ---
 
@@ -177,6 +187,7 @@ This section describes exactly what happens under the hood when you press Record
 ```
 User presses Record
   └─ RecordingMixin.record_both()          _recording_mixin.py
+       ├─ (optional) GazeInitBridge: EyeTracker on worker thread → main thread
        ├─ threading.Barrier (sync t0)
        ├─ WebcamRecorderCore thread         webcam.py
        │    cap.read() → out.write()  [MP4]
@@ -198,9 +209,10 @@ User presses Record
 
 **File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → `RecordingMixin.record_both()`
 
-1. Checks whether the gaze model is present (if gaze is enabled). If not, prompts the user to calibrate or continue without gaze.
+1. If gaze is enabled but no saved model exists, **`_gaze_ready_or_prompt()`** offers to turn gaze off and continue, or to cancel. No heavy model load here.
 2. Asks for the user's email if not already set — the email is embedded in every output filename.
-3. Creates a `threading.Barrier` shared by all recorders (webcam + screen + optionally audio). All threads call `barrier.wait()` before writing their first frame, ensuring every stream starts from the same wall-clock `t0`.
+3. If gaze is on and a model file exists, **`EyeTracker()`** is constructed on a **background thread**; a **`GazeInitBridge`** (`QObject` + `Signal`) delivers the result to the main thread. Then the per-frame callback is attached, CSV is opened, etc. This avoids blocking the Qt event loop when MediaPipe initializes after the countdown.
+4. Creates a `threading.Barrier` shared by all recorders (webcam + screen + optionally audio). All threads call `barrier.wait()` before writing their first frame, ensuring every stream starts from the same wall-clock `t0`.
 
 #### Step 2 – Webcam capture loop
 
@@ -227,9 +239,9 @@ Both write frames to an MP4 via `cv2.VideoWriter` at the configured `FPS`, and p
 
 #### Step 4 – Gaze tracking & CSV save
 
-**File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → `record_both()` gaze block
+**File:** [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) → gaze setup in `record_both` / `_finish_record_both_after_gaze()`
 
-Before recording starts, a callback `_gaze_on_frame_written` is attached via `webcam_recorder.set_on_frame_written(...)`. It runs once per encoded webcam frame (immediately after each `out.write`), including padding frames at shutdown:
+When gaze is active, before the barrier fires, a callback `_gaze_on_frame_written` is attached via `webcam_recorder.set_on_frame_written(...)`. It runs once per encoded webcam frame (immediately after each `out.write`), including padding frames at shutdown:
 
 1. `EyeTracker.track_eyes(frame)` returns the `(x, y)` gaze coordinate.
 2. The timestamp is expressed as `(minute, second)` relative to recording start.
@@ -265,7 +277,8 @@ An `InternalAudioRecorder` captures **system loopback audio** (what you hear) an
 |------|---------------|
 | [`recorder/core/webcam.py`](../recorder/core/webcam.py) | Camera open, frame capture loop, MP4 write, gaze hook |
 | [`recorder/core/screen.py`](../recorder/core/screen.py) | Screen grab (dxcam / mss), MP4 write |
-| [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) | Orchestration: barrier sync, gaze CSV, stop, mux dispatch |
+| [`recorder/ui/app/_recording_mixin.py`](../recorder/ui/app/_recording_mixin.py) | Orchestration: barrier sync, async gaze bridge, gaze CSV, stop, mux dispatch |
+| [`gazer/pyi_rth_eyetrax.py`](../gazer/pyi_rth_eyetrax.py) | PyInstaller runtime hook so eyetrax loads gaze model modules in one-file builds |
 | [`recorder/audio/`](../recorder/audio/) | Loopback audio capture, ffmpeg mux |
 | [`recorder/config.py`](../recorder/config.py) | FPS, paths, camera index, monitor index, flip settings |
 
