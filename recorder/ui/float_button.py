@@ -200,4 +200,6 @@ class FloatButtonWindow(QtWidgets.QWidget):
         self._update_ui()
 
     def _update_ui(self):
+        if hasattr(self._app, "_update_start_controls_enabled"):
+            self._app._update_start_controls_enabled()
         self._paint_button()

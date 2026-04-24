@@ -27,6 +27,40 @@ class GazeInitBridge(QtCore.QObject):
 class RecordingMixin:
     """Mixin that owns all recording-action logic for the App window."""
 
+    def _update_start_controls_enabled(self) -> None:
+        """Float + top bar: disable duplicate starts while busy; do not gate on gaze calibration
+        (``_gaze_ready_or_prompt`` offers recording without gaze if needed).
+        """
+        fw = getattr(self, "_float_win", None)
+        c = getattr(fw, "_canvas", None) if fw else None
+        btn = getattr(self, "_btn_both", None)
+        recording = self._any_recording()
+        countdown = bool(fw and fw._is_counting_down())
+        pending = bool(fw and fw._is_recording_start_pending())
+        tip_idle = "Start: countdown, then record (email is asked if not set yet)."
+
+        if recording:
+            if c is not None:
+                c.setEnabled(True)
+                c.setToolTip("Stop recording")
+            if btn is not None:
+                btn.setEnabled(False)
+                btn.setToolTip("Use the floating button or panel to stop.")
+        elif countdown or pending:
+            if c is not None:
+                c.setEnabled(True)
+                c.setToolTip("")
+            if btn is not None:
+                btn.setEnabled(False)
+                btn.setToolTip("Wait — recording is starting.")
+        else:
+            if c is not None:
+                c.setEnabled(True)
+                c.setToolTip(tip_idle)
+            if btn is not None:
+                btn.setEnabled(True)
+                btn.setToolTip(tip_idle)
+
     def _any_recording(self) -> bool:
         for panel in (self._webcam_panel, self._screen_panel):
             r = getattr(panel, "recorder", None)
@@ -240,6 +274,7 @@ class RecordingMixin:
             self._audio_status_lbl.setStyleSheet(f"color: {config.MUTED};")
 
         self._refresh_settings_button_state()
+        self._update_start_controls_enabled()
 
     def _finish_record_both_after_gaze(
         self, email: str, eye_tracker, init_error: BaseException | None
@@ -256,6 +291,7 @@ class RecordingMixin:
             fw = getattr(self, "_float_win", None)
             if fw is not None:
                 fw._update_ui()
+
     def _gaze_ready_or_prompt(self) -> bool:
         """Return True if recording can proceed. If gaze is on but model is missing,
         show a popup and return False so the caller aborts the start."""
@@ -317,6 +353,8 @@ class RecordingMixin:
 
         if getattr(self, "_auto_mux", False):
             self._dispatch_mux()
+
+        self._update_start_controls_enabled()
 
     def _join_recorders_concurrent(self, timeout: float = 5.0):
         """Join webcam, screen, and audio recorder threads in parallel."""
@@ -449,6 +487,7 @@ class RecordingMixin:
         float_win = getattr(self, "_float_win", None)
         if float_win is not None:
             float_win.show()
+        self._update_start_controls_enabled()
 
     # ------------------------------------------------------------------
     # Mux dispatch (frozen exe vs. plain Python)

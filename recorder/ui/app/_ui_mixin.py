@@ -28,9 +28,7 @@ class UIMixin:
 
         # Sync indicator with checkbox initial state and any future changes
         self._update_gaze_indicator(self._chk_gaze.isChecked())
-        self._chk_gaze.stateChanged.connect(
-            lambda state: self._update_gaze_indicator(bool(state))
-        )
+        self._chk_gaze.stateChanged.connect(self._on_gaze_checkbox_changed)
 
     def _build_topbar(self) -> QtWidgets.QFrame:
         topbar = QtWidgets.QFrame(self._central)
@@ -284,6 +282,11 @@ class UIMixin:
 
     def _toggle_settings_panel(self, checked: bool):
         self._settings_panel.setVisible(checked)
+
+    def _on_gaze_checkbox_changed(self, state: int) -> None:
+        self._update_gaze_indicator(bool(state))
+        if hasattr(self, "_update_start_controls_enabled"):
+            self._update_start_controls_enabled()
 
     def _update_gaze_indicator(self, enabled: bool):
         """Update the bottom-bar gaze indicator to reflect current setting."""
