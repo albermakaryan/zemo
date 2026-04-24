@@ -79,7 +79,8 @@ a = Analysis(
     ] + _eyetrax_submodules + _mp_hidden,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    # Fix eyetrax.models._auto_discover when the package is only in PYZ (one-file)
+    runtime_hooks=["gazer/pyi_rth_eyetrax.py"],
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

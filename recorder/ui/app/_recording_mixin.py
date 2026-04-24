@@ -14,8 +14,14 @@ from recorder.audio import InternalAudioRecorder, is_loopback_available
 from recorder.audio import mux_audio_into_video as muxmod
 
 from recorder.common import email_filename_part, unique_name_with_suffix
-from recorder.ui.dialogs import SettingsDialog,ask_university_email
+from recorder.ui.dialogs import SettingsDialog, ask_university_email
 from gazer import EyeTracker
+
+
+class GazeInitBridge(QtCore.QObject):
+    """Thread-safe: worker constructs EyeTracker, main thread runs the rest of record_both."""
+
+    ready = QtCore.Signal(object, object)  # EyeTracker|None, Exception|None
 
 
 class RecordingMixin:
@@ -97,7 +103,6 @@ class RecordingMixin:
         if not email:
             return
 
-        # ---------------- Gaze setup (BEFORE recorders start) ----------------
         # The callback MUST be attached on the webcam recorder before the
         # preview→recording transition fires the synchronization barrier;
         # otherwise the first several seconds of frames are written to the
@@ -113,71 +118,95 @@ class RecordingMixin:
             and EyeTracker.is_model_saved()
         )
         if gaze_enabled:
-            try:
-                self._eye_tracker = EyeTracker()
-                webcam_recorder = getattr(self._webcam_panel, "recorder", None)
-                gaze_dir = config.RECORDINGS_DIR / config.GAZE_SUBDIR
-                gaze_dir.mkdir(parents=True, exist_ok=True)
+            # GazeEstimator (MediaPipe) can take many seconds; never block the Qt thread.
+            self._record_both_pending_email = email
+            self._recording_start_pending = True
+            if getattr(self, "_gaze_init_bridge", None) is None:
+                self._gaze_init_bridge = GazeInitBridge(self)
+                self._gaze_init_bridge.ready.connect(self._on_gaze_init_from_worker)
 
-                # Predict the webcam filename using the same logic
-                # ``WebcamRecorderCore.begin_recording`` will use, so the gaze
-                # CSV name and the ``video_id`` column match the eventual
-                # MP4 filename. Calling ``unique_name_with_suffix`` here does
-                # not create any file, and ``begin_recording`` will get the
-                # same result when it runs a moment later.
-                webcam_dir = config.get_webcam_dir()
-                webcam_dir.mkdir(parents=True, exist_ok=True)
-                base = email_filename_part(email) if email else "user"
-                predicted = unique_name_with_suffix(
-                    webcam_dir, base, f"_webcam{config.VIDEO_EXT}"
-                )
-                predicted_stem = predicted.stem  # e.g. "alber@gmail.com_1_webcam"
-                if "_webcam" in predicted_stem:
-                    video_id = predicted_stem[: predicted_stem.rfind("_webcam")]
-                else:
-                    video_id = email
+            def work():
+                try:
+                    t = EyeTracker()
+                    self._gaze_init_bridge.ready.emit(t, None)
+                except Exception as e:
+                    self._gaze_init_bridge.ready.emit(None, e)
 
-                csv_path = gaze_dir / f"{video_id}_gaze.csv"
-                self._gaze_csv_file = open(csv_path, "w", newline="")
-                self._gaze_csv_writer = csv.writer(self._gaze_csv_file)
-                self._gaze_csv_writer.writerow(["video_id", "frame_id", "minute", "second", "x", "y"])
-                frame_counter = [0]
-                start_elapsed = [None]
-                last_gaze = [None, None]
+            threading.Thread(target=work, daemon=True).start()
+            return
 
-                def _gaze_on_frame_written(frame, elapsed, is_padding=False):
-                    # Called from webcam only immediately after each out.write (encoded frame).
-                    if self._gaze_csv_writer is None:
-                        return
-                    if not is_padding:
-                        x, y = self._eye_tracker.track_eyes(frame)
-                        last_gaze[0], last_gaze[1] = x, y
-                    else:
-                        x, y = last_gaze[0], last_gaze[1]
-                    if start_elapsed[0] is None:
-                        start_elapsed[0] = elapsed
-                    relative = int(elapsed - start_elapsed[0])
-                    self._gaze_csv_writer.writerow(
-                        [video_id, frame_counter[0], relative // 60, relative % 60, x, y]
-                    )
-                    frame_counter[0] += 1
+        self._finish_record_both_after_gaze(email, None, None)
 
-                if webcam_recorder is not None:
-                    webcam_recorder.set_on_frame_written(_gaze_on_frame_written)
-                self._gaze_status_lbl.setText("+ gaze")
-                self._gaze_status_lbl.setStyleSheet(f"color: {config.GREEN};")
-                self._btn_calibrate.setEnabled(False)
-            except Exception as exc:
-                self._gaze_status_lbl.setText("gaze error")
-                self._gaze_status_lbl.setStyleSheet(f"color: {config.RED};")
-                print(f"Gaze tracking init failed: {exc}")
-                self._eye_tracker = None
-                if self._gaze_csv_file:
-                    self._gaze_csv_file.close()
-                    self._gaze_csv_file = None
-                self._gaze_csv_writer = None
+    @QtCore.Slot(object, object)
+    def _on_gaze_init_from_worker(self, eye_tracker, err):
+        email = self._record_both_pending_email
+        self._record_both_pending_email = None
+        if not email:
+            return
+        self._finish_record_both_after_gaze(email, eye_tracker, err)
 
-        # ---------------- Start recorders ----------------
+    def _gaze_init_failed_ui(self, exc: BaseException) -> None:
+        self._gaze_status_lbl.setText("gaze error")
+        self._gaze_status_lbl.setStyleSheet(f"color: {config.RED};")
+        print(f"Gaze tracking init failed: {exc}")
+        self._eye_tracker = None
+        if self._gaze_csv_file:
+            self._gaze_csv_file.close()
+            self._gaze_csv_file = None
+        self._gaze_csv_writer = None
+
+    def _setup_gaze_csv_for_recording(self, email: str) -> None:
+        """Call with self._eye_tracker already set. Attaches the per-frame gaze callback."""
+        assert self._eye_tracker is not None
+        webcam_recorder = getattr(self._webcam_panel, "recorder", None)
+        gaze_dir = config.RECORDINGS_DIR / config.GAZE_SUBDIR
+        gaze_dir.mkdir(parents=True, exist_ok=True)
+        webcam_dir = config.get_webcam_dir()
+        webcam_dir.mkdir(parents=True, exist_ok=True)
+        base = email_filename_part(email) if email else "user"
+        predicted = unique_name_with_suffix(
+            webcam_dir, base, f"_webcam{config.VIDEO_EXT}"
+        )
+        predicted_stem = predicted.stem
+        if "_webcam" in predicted_stem:
+            video_id = predicted_stem[: predicted_stem.rfind("_webcam")]
+        else:
+            video_id = email
+
+        csv_path = gaze_dir / f"{video_id}_gaze.csv"
+        self._gaze_csv_file = open(csv_path, "w", newline="")
+        self._gaze_csv_writer = csv.writer(self._gaze_csv_file)
+        self._gaze_csv_writer.writerow(
+            ["video_id", "frame_id", "minute", "second", "x", "y"]
+        )
+        frame_counter = [0]
+        start_elapsed = [None]
+        last_gaze = [None, None]
+        tr = self._eye_tracker
+
+        def _gaze_on_frame_written(frame, elapsed, is_padding=False):
+            if self._gaze_csv_writer is None:
+                return
+            if not is_padding:
+                x, y = tr.track_eyes(frame)
+                last_gaze[0], last_gaze[1] = x, y
+            else:
+                x, y = last_gaze[0], last_gaze[1]
+            if start_elapsed[0] is None:
+                start_elapsed[0] = elapsed
+            relative = int(elapsed - start_elapsed[0])
+            self._gaze_csv_writer.writerow(
+                [video_id, frame_counter[0], relative // 60, relative % 60, x, y]
+            )
+            frame_counter[0] += 1
+
+        if webcam_recorder is not None:
+            webcam_recorder.set_on_frame_written(_gaze_on_frame_written)
+        self._gaze_status_lbl.setText("+ gaze")
+        self._gaze_status_lbl.setStyleSheet(f"color: {config.GREEN};")
+        self._btn_calibrate.setEnabled(False)
+
+    def _start_recorders_barrier_and_audio(self, email: str) -> None:
         use_audio = is_loopback_available()
         num_party = 3 if use_audio else 2
         shared_start_time = [None]
@@ -211,6 +240,22 @@ class RecordingMixin:
             self._audio_status_lbl.setStyleSheet(f"color: {config.MUTED};")
 
         self._refresh_settings_button_state()
+
+    def _finish_record_both_after_gaze(
+        self, email: str, eye_tracker, init_error: BaseException | None
+    ) -> None:
+        try:
+            if init_error is not None:
+                self._gaze_init_failed_ui(init_error)
+            elif eye_tracker is not None:
+                self._eye_tracker = eye_tracker
+                self._setup_gaze_csv_for_recording(email)
+            self._start_recorders_barrier_and_audio(email)
+        finally:
+            self._recording_start_pending = False
+            fw = getattr(self, "_float_win", None)
+            if fw is not None:
+                fw._update_ui()
     def _gaze_ready_or_prompt(self) -> bool:
         """Return True if recording can proceed. If gaze is on but model is missing,
         show a popup and return False so the caller aborts the start."""

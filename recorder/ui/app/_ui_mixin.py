@@ -66,48 +66,38 @@ class UIMixin:
             self._fps_status_lbl, alignment=QtCore.Qt.AlignmentFlag.AlignRight
         )
 
-        self._btn_settings = QtWidgets.QPushButton("Settings…", topbar)
+        # Gear: toggles the strip below the top bar (gaze, etc.); FPS lives in Settings dialog.
+        self._btn_settings = QtWidgets.QPushButton("⚙", topbar)
         self._btn_settings.setFont(sans_font)
         self._btn_settings.setCursor(
             QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         )
-        # Settings gear button — upper-right, before Record Both
-        self._btn_settings = QtWidgets.QPushButton("⚙", topbar)
-        self._btn_settings.setFont(sans_font)
-        self._btn_settings.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self._btn_settings.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self._btn_settings.setCheckable(True)
         self._btn_settings.setChecked(False)
         self._btn_settings.setFixedSize(34, 34)
+        self._btn_settings.setToolTip("Show or hide the gaze & settings panel")
         self._btn_settings.setStyleSheet(
             f"""
             QPushButton {{
                 background-color: {config.BG3};
                 color: {config.FG2};
                 border: 1px solid {config.BORDER};
-                padding: 8px 14px;
-                border: none;
             }}
             QPushButton:hover {{
                 background-color: {config.BORDER};
                 color: {config.FG};
             }}
-        """
-        )
-        self._btn_settings.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-        self._btn_settings.setToolTip("Application preferences (frame rate, etc.)")
-        self._btn_settings.clicked.connect(self._open_settings)
-        layout.addWidget(
-            self._btn_settings, alignment=QtCore.Qt.AlignmentFlag.AlignRight
-        )
             QPushButton:checked {{
                 background-color: {config.BORDER};
                 color: {config.FG};
             }}
             """
         )
-        self._btn_settings.clicked.connect(self._toggle_settings_panel)
-        layout.addWidget(self._btn_settings, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        self._btn_settings.toggled.connect(self._toggle_settings_panel)
+        layout.addWidget(
+            self._btn_settings, alignment=QtCore.Qt.AlignmentFlag.AlignRight
+        )
 
         self._btn_both = QtWidgets.QPushButton("⏺  Record Both", topbar)
         self._btn_both.setFont(sans_font)
@@ -169,6 +159,22 @@ class UIMixin:
         sp_layout.addWidget(self._gaze_status_lbl)
 
         sp_layout.addStretch(1)
+
+        self._btn_recorder_settings = QtWidgets.QPushButton(
+            "Recorder settings…", self._settings_panel
+        )
+        self._btn_recorder_settings.setFont(mono_sm)
+        self._btn_recorder_settings.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._btn_recorder_settings.setCursor(
+            QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        )
+        self._btn_recorder_settings.setStyleSheet(
+            f"QPushButton {{ color: {config.FG2}; background: {config.BG3}; border: 1px solid {config.BORDER}; padding: 4px 10px; }}"
+            f"QPushButton:hover {{ color: {config.FG}; background: {config.BORDER}; }}"
+        )
+        self._btn_recorder_settings.setToolTip("FPS and other options (saved to disk)")
+        self._btn_recorder_settings.clicked.connect(self._open_settings)
+        sp_layout.addWidget(self._btn_recorder_settings)
 
         return self._settings_panel
 
