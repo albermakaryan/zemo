@@ -262,6 +262,8 @@ class RecorderPanel(QtWidgets.QFrame):
             """
         )
         self._btn_open.setEnabled(False)
+        if hasattr(self._app, "_refresh_settings_button_state"):
+            self._app._refresh_settings_button_state()
 
     def _stop_recording(self, stop_time=None):
         if self.recorder:
@@ -340,6 +342,8 @@ class RecorderPanel(QtWidgets.QFrame):
             """
         )
         self._btn_open.setEnabled(True)
+        if hasattr(self._app, "_refresh_settings_button_state"):
+            self._app._refresh_settings_button_state()
 
     def _open_file(self):
         if not self._last_file or not Path(self._last_file).exists():

@@ -1,5 +1,7 @@
 """Floating always-on-top Start/Stop button window (PySide, draggable, no title bar)."""
 
+import sys
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from recorder import config
@@ -141,6 +143,21 @@ class FloatButtonWindow(QtWidgets.QWidget):
                 | QtWidgets.QMessageBox.StandardButton.No
             )
             dlg.setDefaultButton(QtWidgets.QMessageBox.StandardButton.No)
+            # Custom chrome: title + close only (no min/max, no system menu) — Windows
+            # otherwise still shows a minimize control when only clearing hint bits.
+            dlg.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+            _flags = (
+                QtCore.Qt.WindowType.Dialog
+                | QtCore.Qt.WindowType.CustomizeWindowHint
+                | QtCore.Qt.WindowType.WindowTitleHint
+                | QtCore.Qt.WindowType.WindowCloseButtonHint
+            )
+            if sys.platform == "win32" and hasattr(
+                QtCore.Qt.WindowType, "MSWindowsFixedSizeDialogHint"
+            ):
+                _flags |= QtCore.Qt.WindowType.MSWindowsFixedSizeDialogHint
+            dlg.setWindowFlags(_flags)
+            dlg.setParent(self)
             if dlg.exec() == QtWidgets.QMessageBox.StandardButton.Yes:
                 self._app.stop_both()
                 self._update_ui()

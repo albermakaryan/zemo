@@ -41,6 +41,7 @@ class App(UIMixin, RecordingMixin, QtWidgets.QMainWindow):
         self.setCentralWidget(self._central)
 
         self._build()
+        self._load_fps_setting()
         self._float_win = FloatButtonWindow(self)
         self._float_win.show()
 

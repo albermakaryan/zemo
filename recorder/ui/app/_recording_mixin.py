@@ -7,18 +7,68 @@ import time
 import threading
 from pathlib import Path
 
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 
 from recorder import config
 from recorder.audio import InternalAudioRecorder, is_loopback_available
 from recorder.audio import mux_audio_into_video as muxmod
+
 from recorder.common import email_filename_part, unique_name_with_suffix
-from recorder.ui.dialogs import ask_university_email
+from recorder.ui.dialogs import SettingsDialog,ask_university_email
 from gazer import EyeTracker
 
 
 class RecordingMixin:
     """Mixin that owns all recording-action logic for the App window."""
+
+    def _any_recording(self) -> bool:
+        for panel in (self._webcam_panel, self._screen_panel):
+            r = getattr(panel, "recorder", None)
+            if r and getattr(r, "recording", False):
+                return True
+        a = getattr(self, "_audio_recorder", None)
+        return bool(a and getattr(a, "recording", False))
+
+    def _refresh_settings_button_state(self) -> None:
+        btn = getattr(self, "_btn_settings", None)
+        if not btn:
+            return
+        btn.setEnabled(not self._any_recording())
+
+    def _apply_persisted_fps(self, v: int) -> None:
+        v = max(config.FPS_MIN, min(config.FPS_MAX, int(v)))
+        old = int(config.FPS)
+        config.FPS = v
+        s = QtCore.QSettings(config.QSETTINGS_ORG, config.QSETTINGS_APP)
+        s.setValue("recording/fps", v)
+        s.sync()
+        self._update_fps_status_label()
+        if self._any_recording():
+            return
+        if old != v:
+            self._restart_previews_for_fps()
+
+    def _open_settings(self) -> None:
+        if self._any_recording():
+            return
+        dlg = SettingsDialog(self, config.FPS)
+        dlg.setMinimumWidth(400)
+        if self.frameGeometry().isValid():
+            g = self.frameGeometry()
+            dlg.move(g.center() - dlg.rect().center())
+        if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        self._apply_persisted_fps(dlg.saved_fps)
+
+    def _restart_previews_for_fps(self) -> None:
+        for panel in (self._webcam_panel, self._screen_panel):
+            r = getattr(panel, "recorder", None)
+            if r and getattr(r, "stop", None):
+                r.stop()
+        self._join_recorders_concurrent(timeout=3.0)
+        for panel in (self._webcam_panel, self._screen_panel):
+            panel.recorder = None
+        self._start_previews()
 
     # ------------------------------------------------------------------
     # Email
@@ -160,6 +210,7 @@ class RecordingMixin:
             self._audio_status_lbl.setText("(no system audio)")
             self._audio_status_lbl.setStyleSheet(f"color: {config.MUTED};")
 
+        self._refresh_settings_button_state()
     def _gaze_ready_or_prompt(self) -> bool:
         """Return True if recording can proceed. If gaze is on but model is missing,
         show a popup and return False so the caller aborts the start."""
@@ -209,6 +260,7 @@ class RecordingMixin:
             self._audio_recorder.stop(stop_time=stop_time)
 
         self._join_recorders_concurrent(timeout=5.0)
+        self._refresh_settings_button_state()
 
         # Detach gaze callback only after the thread has fully finished —
         # including the padding-frame writes in the finally block.

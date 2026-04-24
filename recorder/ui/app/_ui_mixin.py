@@ -4,6 +4,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from recorder import config
 from recorder.recorders import WebcamRecorder, ScreenRecorder
+from recorder.ui.dialogs import load_persisted_fps
 from recorder.ui.panels import RecorderPanel
 from gazer import EyeTracker
 
@@ -53,6 +54,23 @@ class UIMixin:
 
         layout.addStretch(1)
 
+        self._fps_status_lbl = QtWidgets.QLabel("", topbar)
+        self._fps_status_lbl.setFont(mono_font)
+        self._fps_status_lbl.setStyleSheet(f"color: {config.FG2};")
+        self._fps_status_lbl.setToolTip(
+            "Active target frame rate (the last value saved in Settings, not necessarily the "
+            f"code default of {int(config.DEFAULT_FPS)} in config.py). Change in Settings… "
+            "when not recording."
+        )
+        layout.addWidget(
+            self._fps_status_lbl, alignment=QtCore.Qt.AlignmentFlag.AlignRight
+        )
+
+        self._btn_settings = QtWidgets.QPushButton("Settings…", topbar)
+        self._btn_settings.setFont(sans_font)
+        self._btn_settings.setCursor(
+            QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        )
         # Settings gear button — upper-right, before Record Both
         self._btn_settings = QtWidgets.QPushButton("⚙", topbar)
         self._btn_settings.setFont(sans_font)
@@ -66,12 +84,22 @@ class UIMixin:
             QPushButton {{
                 background-color: {config.BG3};
                 color: {config.FG2};
+                border: 1px solid {config.BORDER};
+                padding: 8px 14px;
                 border: none;
             }}
             QPushButton:hover {{
                 background-color: {config.BORDER};
                 color: {config.FG};
             }}
+        """
+        )
+        self._btn_settings.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._btn_settings.setToolTip("Application preferences (frame rate, etc.)")
+        self._btn_settings.clicked.connect(self._open_settings)
+        layout.addWidget(
+            self._btn_settings, alignment=QtCore.Qt.AlignmentFlag.AlignRight
+        )
             QPushButton:checked {{
                 background-color: {config.BORDER};
                 color: {config.FG};
@@ -278,3 +306,13 @@ class UIMixin:
         for panel in (self._webcam_panel, self._screen_panel):
             if hasattr(panel, "_start_preview"):
                 panel._start_preview()
+
+    def _load_fps_setting(self) -> None:
+        config.FPS = load_persisted_fps()
+        self._update_fps_status_label()
+
+    def _update_fps_status_label(self) -> None:
+        lbl = getattr(self, "_fps_status_lbl", None)
+        if not lbl:
+            return
+        lbl.setText(f"FPS {int(config.FPS)}")
