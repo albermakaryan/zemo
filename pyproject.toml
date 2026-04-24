@@ -18,7 +18,8 @@ dependencies = [
     "dxcam-cpp==0.2.5",
     "av>=12.0.0",
     "pyside6>=6.4.0",
-    "eyetrax"
+    "eyetrax",
+    "pytest>=9.0.3",
 ]
 
 [project.optional-dependencies]
@@ -30,4 +31,15 @@ windows = [
 # Linux: system audio via PulseAudio/PipeWire monitor (sounddevice).
 linux = [
     "sounddevice>=0.4.6",
+]
+dev = [
+    "pytest-mock>=3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["."]
+addopts = "-ra -q"
+markers = [
+    "integration: real hardware or slow manual-adjacent checks (opt-in with -m integration)",
 ]
