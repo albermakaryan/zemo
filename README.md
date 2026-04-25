@@ -7,9 +7,10 @@ Desktop app to record screen and/or webcam as MP4, with a floating movable start
 - **Screen** and **webcam** recording (separate or both at once, synced)
 - **System audio**: Windows via WASAPI (PyAudioWPatch); Linux via PulseAudio/PipeWire monitor (sounddevice)
 - **MP4** video output for webcam and screen
+- **Gaze tracking**: per-frame eye-gaze estimation via eyetrax; saved as a CSV alongside recordings
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
-- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, and `recordings/audio/`
+- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, `recordings/audio/`, and `recordings/gaze/`
 
 ## Requirements
 
@@ -66,13 +67,57 @@ The WASAPI callback itself never touches disk — all writes go through a bounde
   - ffmpeg combines the screen MP4 and audio file (`.mka` preferred over `.wav`) by PTS alignment, re-encodes audio to AAC 192k.
   - Final file: `recordings/screen_with_audio/<email>_screen_with_audio.mp4`.
 
+## Gaze tracking
+
+Gaze tracking uses [eyetrax](https://github.com/) to estimate where on screen the participant is looking during webcam recording.
+
+### Setup
+
+1. Click **Calibrate Eyes** in the bottom bar. A full-screen Lissajous calibration window will open.
+2. Follow the on-screen target with your eyes until calibration completes.
+3. The model is saved to `gaze_model.pkl` next to the app. The button changes to **Re-calibrate Eyes**.
+
+### During recording
+
+- Enable/disable gaze tracking via **⚙** (gear) in the top bar, then the **Enable** checkbox in the panel (on by default).
+- The **`+ gaze`** indicator in the bottom bar (green) reflects the setting.
+- If gaze is enabled but no calibration file exists when you start recording, a popup lets you **continue without gaze** (gaze is turned off for that session) or **cancel** to calibrate first. The start controls stay available so that flow is never blocked.
+- After the countdown, loading the gaze stack (MediaPipe) can take a few seconds; the float button may show **⏳** while that runs on a background thread so the UI stays responsive.
+
+### Output
+
+Each recording session produces `recordings/gaze/<email>_gaze.csv` with columns:
+
+| Column | Description |
+|---|---|
+| `video_id` | User email |
+| `frame_id` | 0-based frame counter (only increments on successful gaze detections) |
+| `minute` | Integer minutes since first gaze frame |
+| `second` | Integer seconds within the current minute |
+| `x` | Estimated screen X coordinate |
+| `y` | Estimated screen Y coordinate |
+
+Blink or no-face frames produce no row.
+
 ## Build a standalone .exe (Windows)
 
 1. Install dependencies and run the app at least once: `pip install -r requirements.txt`
 2. From the project root, run **`build_exe.bat`** (double-click or from a terminal).
 3. The executable is created at **`dist\Recorder_<version>.exe`** (for example `Recorder_1.2.3.exe`).
 
-When you run `build_exe.bat`:
+### Test build (no version bump)
+
+To verify the build without changing **`VERSION`**, **`version_info.txt`**, or the versioned `dist\Recorder_<ver>.exe` name:
+
+```bat
+build_exe.bat --test
+```
+
+(You can also pass `test` without dashes.) The script reads the current `VERSION` as-is, does not rewrite that file, keeps an existing `version_info.txt` if present, and copies the result to **`dist\Recorder_test.exe`**. Use this for local QA; use a normal `build_exe.bat` run for release builds.
+
+### Normal release build
+
+When you run `build_exe.bat` **without** `--test`:
 
 - **Version source of truth** is the `VERSION` file in the project root.
 - The script bumps the version **automatically** and writes it back to `VERSION`:
@@ -83,7 +128,9 @@ When you run `build_exe.bat`:
 - It then runs `python build_version_info.py <version>` to regenerate `version_info.txt` so the Windows file properties match.
 - Finally it builds using `Recorder.spec` and copies `dist\Recorder.exe` to `dist\Recorder_<version>.exe`.
 
-The app window title shows the current version (e.g. `Recorder v1.2.4`). You can copy `Recorder_<version>.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, and `audio/` inside) for saving videos. No Python installation needed on that machine.
+**Frozen .exe and gaze:** The PyInstaller one-file layout includes a small runtime hook (`gazer/pyi_rth_eyetrax.py`) so eyetrax can load its gaze model modules inside the bundle. Calibration from the **Calibrate** button uses `Recorder.exe --calibrate-only` in the frozen build (see `main.py`).
+
+The app window title shows the current version (e.g. `Recorder v1.2.4`). You can copy `Recorder_<version>.exe` to any folder (or another PC). On first run it will create a `recordings` folder next to the exe (with `webcam/`, `screen/`, `audio/`, and `gaze/` as needed) for saving files. No Python installation needed on that machine.
 
 ## Project layout
 
@@ -92,6 +139,7 @@ zemo/
 ├── main.py              # Entry point (dependency check + launch)
 ├── run_recorder.bat     # Windows launcher
 ├── run_recorder.sh      # Linux/macOS launcher
+├── gaze_model.pkl       # Saved gaze calibration model (created on first calibration)
 ├── requirements.txt
 ├── pyproject.toml
 ├── recorder/            # Package
@@ -100,10 +148,12 @@ zemo/
 │   ├── ui/              # App, panels, float button (Qt UI layer)
 │   ├── core/            # Core recording logic (webcam/screen), no UI
 │   ├── audio/           # Internal (system) audio recorder (Windows + Linux backends)
+├── gazer/               # Gaze tracking package (EyeTracker wrapping eyetrax)
 └── recordings/          # Output (created automatically)
     ├── webcam/          # Webcam MP4s
     ├── screen/          # Screen MP4s
     ├── audio/           # System audio .mka (PyAV) or .wav (fallback)
+    ├── gaze/            # Gaze CSVs (<email>_gaze.csv)
     └── screen_with_audio/  # Muxed screen + audio MP4s
 ```
 
@@ -126,7 +176,8 @@ Play a video in the browser while it runs; the WAV should contain that audio. Li
 ## Configuration
 
 - **Countdown length:** edit `COUNTDOWN_SECONDS` in `recorder/config.py`.
-- **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, and `audio/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
+- **Gaze model path:** edit `GAZE_ESTIMATOR_PATH` in `recorder/config.py` (default: `gaze_model.pkl` next to the app).
+- **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, `audio/`, and `gaze/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
 
 ## License
 

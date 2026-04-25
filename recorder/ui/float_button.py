@@ -95,6 +95,10 @@ class FloatButtonWindow(QtWidgets.QWidget):
             fill = QtGui.QColor(config.BG3)
             text = str(self._countdown_remaining)
             text_color = QtGui.QColor(config.FG2)
+        elif self._is_recording_start_pending():
+            fill = QtGui.QColor(config.BG3)
+            text = "⏳"
+            text_color = QtGui.QColor(config.FG2)
         elif is_recording:
             fill = QtGui.QColor(config.FLOAT_STOP_BG)
             text = "⏹"
@@ -124,6 +128,9 @@ class FloatButtonWindow(QtWidgets.QWidget):
 
     def _is_counting_down(self) -> bool:
         return self._countdown_remaining > 0
+
+    def _is_recording_start_pending(self) -> bool:
+        return getattr(self._app, "_recording_start_pending", False)
 
     def _is_recording(self) -> bool:
         a = self._app
@@ -163,6 +170,11 @@ class FloatButtonWindow(QtWidgets.QWidget):
                 self._update_ui()
             return
         elif not self._is_counting_down():
+            if self._is_recording_start_pending():
+                return
+            if hasattr(self._app, "_gaze_ready_or_prompt"):
+                if not self._app._gaze_ready_or_prompt():
+                    return
             if not self._app.get_recording_email():
                 return
             self._app.showMinimized()
@@ -188,4 +200,6 @@ class FloatButtonWindow(QtWidgets.QWidget):
         self._update_ui()
 
     def _update_ui(self):
+        if hasattr(self._app, "_update_start_controls_enabled"):
+            self._app._update_start_controls_enabled()
         self._paint_button()

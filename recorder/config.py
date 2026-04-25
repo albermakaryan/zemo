@@ -19,6 +19,9 @@ WEBCAM_SUBDIR = "webcam"
 SCREEN_SUBDIR = "screen"
 AUDIO_SUBDIR = "audio"
 DETECTION_SUBDIR = "detection"
+GAZE_SUBDIR = "gaze"
+
+GAZE_ESTIMATOR_PATH = PROJECT_ROOT / "gaze_model.pkl"
 
 # Separate folder for test runs (python -m tests screen/webcam/audio)
 RECORDINGS_TEST_DIR_NAME = "recordings_test"
@@ -82,7 +85,7 @@ def ensure_recordings_dirs() -> None:
     """Create recordings base and subfolders if they don't exist."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     (RECORDINGS_DIR / ".gitkeep").touch(exist_ok=True)
-    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR):
+    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR, GAZE_SUBDIR):
         subdir = RECORDINGS_DIR / sub
         subdir.mkdir(parents=True, exist_ok=True)
         (subdir / ".gitkeep").touch(exist_ok=True)

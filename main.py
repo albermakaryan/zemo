@@ -53,6 +53,13 @@ if sys.platform == "win32":
             f"{_existing};{_rule}" if _existing else _rule
         )
 
+# Frozen exe (PyInstaller): subprocess cannot use ``python -c``; use ``Recorder.exe --calibrate-only``.
+if __name__ == "__main__" and "--calibrate-only" in sys.argv:
+    from gazer import EyeTracker
+
+    EyeTracker.calibrate_and_create()
+    raise SystemExit(0)
+
 from PySide6 import QtWidgets
 
 

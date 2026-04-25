@@ -223,6 +223,10 @@ class RecorderPanel(QtWidgets.QFrame):
         # else e.g. ScreenRecorder: no preview yet, recorder stays created but idle until _start_recording
 
     def _start_recording(self, start_barrier=None, email=None):
+        # Let the app veto the start (e.g. gaze popup) when triggered by a panel button.
+        if start_barrier is None and hasattr(self._app, "_gaze_ready_or_prompt"):
+            if not self._app._gaze_ready_or_prompt():
+                return
         email = email if email is not None else self._app.get_recording_email()
         if not email:
             return

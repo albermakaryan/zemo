@@ -2,6 +2,10 @@
 Core webcam recorder (backend-only, no UI toolkit imports).
 
 Reusable by different frontends (PySide GUI, CLI tools, tests).
+
+Gaze (or any per-encoded-frame hook): register ``set_on_frame_written``; it runs
+immediately after each ``out.write`` (see ``WEBCAM_MP4_MAIN_WRITE``,
+``WEBCAM_MP4_PAD_WRITE``).
 """
 
 from pathlib import Path
@@ -86,10 +90,12 @@ class WebcamRecorderCore:
         self.recording = False
         self.filename = ""
         self._pending_recording = None  # (save_dir, barrier, email)
-        self._overlay_callback = None
+        # Invoked only when a frame is written to the MP4 (same count as video frames).
+        self._on_frame_written = None
 
-    def set_overlay_callback(self, callback):
-        self._overlay_callback = callback
+    def set_on_frame_written(self, callback):
+        """Callback ``(frame, elapsed, is_padding)`` — runs synchronously right after each ``out.write``."""
+        self._on_frame_written = callback
 
     def start_preview(self):
         self._stop.clear()
@@ -142,12 +148,21 @@ class WebcamRecorderCore:
             if i not in indices_to_try:
                 indices_to_try.append(i)
         api_name = ""
-        for idx in indices_to_try:
-            cap, api_name = _try_open_capture(idx)
+
+        # Retry opening the camera: handles the case where it was just released
+        # by another process (e.g. eyetrax calibration) and isn't immediately available.
+        for attempt in range(6):
+            for idx in indices_to_try:
+                cap, api_name = _try_open_capture(idx)
+                if cap is not None and cap.isOpened():
+                    break
+                cap = None
+                api_name = ""
             if cap is not None and cap.isOpened():
                 break
-            cap = None
-            api_name = ""
+            if attempt < 5:
+                time.sleep(1.0)
+
         if cap is None or not cap.isOpened():
             self.on_status(
                 "error",
@@ -239,14 +254,14 @@ class WebcamRecorderCore:
                         out.write(frame)
                         frame_count += 1
                         next_write_time += frame_interval
+                        if self._on_frame_written is not None:
+                            try:
+                                self._on_frame_written(frame, elapsed, False)
+                            except Exception:
+                                pass
                     sleep_until = next_write_time - time.time()
                     if sleep_until > 0.002:
                         time.sleep(sleep_until)
-                if self._overlay_callback is not None:
-                    try:
-                        self._overlay_callback(frame, elapsed, self.recording)
-                    except Exception:
-                        pass
                 preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
                 self.on_frame(preview, elapsed)
         finally:
@@ -258,6 +273,11 @@ class WebcamRecorderCore:
                 if frame is not None and frames_missing > 0:
                     for _ in range(frames_missing):
                         out.write(frame)
+                        if self._on_frame_written is not None:
+                            try:
+                                self._on_frame_written(frame, elapsed, True)
+                            except Exception:
+                                pass
                 out.release()
                 self.on_done(self.filename)
             cap.release()

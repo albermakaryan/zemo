@@ -14,8 +14,11 @@ from ._recording_mixin import RecordingMixin
 class App(UIMixin, RecordingMixin, QtWidgets.QMainWindow):
     """Main recorder application window."""
 
+    _calibration_finished = QtCore.Signal()
+
     def __init__(self, auto_mux: bool = True, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
+        self._calibration_finished.connect(self._on_calibration_done)
         self.setWindowTitle(f"Recorder v{__version__}")
         self.setObjectName("MainWindow")
         self.setStyleSheet(
@@ -41,6 +44,7 @@ class App(UIMixin, RecordingMixin, QtWidgets.QMainWindow):
         self._load_fps_setting()
         self._float_win = FloatButtonWindow(self)
         self._float_win.show()
+        self._update_start_controls_enabled()
 
         self._center_on_screen()
         self._start_previews()

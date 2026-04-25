@@ -17,6 +17,9 @@ def _load_version() -> str:
 
 __version__ = _load_version()
 
-from recorder.ui import App
 
-__all__ = ["App", "__version__"]
+def __getattr__(name: str):
+    if name == "App":
+        from recorder.ui import App
+        return App
+    raise AttributeError(f"module 'recorder' has no attribute {name!r}")
