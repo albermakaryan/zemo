@@ -21,6 +21,7 @@ class FakeRecordingApp(QtWidgets.QWidget):
         self.record_both_called = 0
         self.stop_both_called = 0
         self._email = "t@example.com"
+        self._gaze_ok = True
 
     def get_recording_email(self) -> str:
         return self._email
@@ -35,7 +36,7 @@ class FakeRecordingApp(QtWidgets.QWidget):
         pass
 
     def _gaze_ready_or_prompt(self) -> bool:
-        return True
+        return self._gaze_ok
 
 
 class _FakePanel:

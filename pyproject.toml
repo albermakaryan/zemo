@@ -34,6 +34,7 @@ linux = [
 ]
 dev = [
     "pytest-mock>=3.0",
+    "pytest-cov>=4.0",
 ]
 
 [tool.pytest.ini_options]
@@ -43,3 +44,16 @@ addopts = "-ra -q"
 markers = [
     "integration: real hardware or slow manual-adjacent checks (opt-in with -m integration)",
 ]
+
+[tool.coverage.run]
+source = ["recorder", "gazer", "validation"]
+branch = true
+omit = [
+    "*/.venv/*",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+fail_under = 0
