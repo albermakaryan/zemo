@@ -60,6 +60,11 @@ class ScreenRecorderCore:
         self.filename = ""
         self._pending_recording = None  # (save_dir, barrier, email)
         self._start_barrier = None
+        self._on_frame_written = None
+
+    def set_on_frame_written(self, callback):
+        """Register ``callback(frame, elapsed, is_padding)`` after each encoded screen frame (or None)."""
+        self._on_frame_written = callback
 
     def start_preview(self):
         self._stop.clear()
@@ -211,15 +216,24 @@ class ScreenRecorderCore:
                             frame = cv2.resize(frame, (w, h))
                         last_bgr = frame
                     if out is not None:
+                        written = frame
                         try:
                             out.write(frame)
                         except Exception:
                             if last_bgr is not None:
+                                written = last_bgr
                                 out.write(last_bgr)
                             else:
-                                out.write(np.zeros((h, w, 3), dtype=np.uint8))
+                                written = np.zeros((h, w, 3), dtype=np.uint8)
+                                out.write(written)
                         frame_count += 1
                         next_write_time += frame_interval
+                        elapsed = time.time() - t0
+                        if self._on_frame_written is not None:
+                            try:
+                                self._on_frame_written(written, elapsed, False)
+                            except Exception:
+                                pass
                     else:
                         next_write_time = t_now + frame_interval
                     preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
@@ -231,8 +245,14 @@ class ScreenRecorderCore:
                 expected_frames = int(elapsed * config.FPS)
                 frames_missing = expected_frames - frame_count
                 if last_bgr is not None and frames_missing > 0:
+                    pad_elapsed = t_final - t0
                     for _ in range(frames_missing):
                         out.write(last_bgr)
+                        if self._on_frame_written is not None:
+                            try:
+                                self._on_frame_written(last_bgr, pad_elapsed, True)
+                            except Exception:
+                                pass
                 out.release()
             if camera is not None:
                 try:
@@ -320,6 +340,12 @@ class ScreenRecorderCore:
                                 out.write(frame)
                                 frame_count += 1
                                 next_write_time += frame_interval
+                                elapsed = time.time() - t0
+                                if self._on_frame_written is not None:
+                                    try:
+                                        self._on_frame_written(frame, elapsed, False)
+                                    except Exception:
+                                        pass
                             else:
                                 next_write_time = t_now + frame_interval
                             preview = resize_frame(
@@ -329,13 +355,21 @@ class ScreenRecorderCore:
                         except Exception:
                             if out is not None:
                                 if last_bgr is not None:
+                                    written = last_bgr
                                     out.write(last_bgr)
                                 else:
                                     black = np.zeros((h, w, 3), dtype=np.uint8)
+                                    written = black
                                     out.write(black)
                                     last_bgr = black
                                 frame_count += 1
                                 next_write_time += frame_interval
+                                elapsed = time.time() - t0
+                                if self._on_frame_written is not None:
+                                    try:
+                                        self._on_frame_written(written, elapsed, False)
+                                    except Exception:
+                                        pass
                             else:
                                 next_write_time = t_now + frame_interval
             finally:
@@ -345,8 +379,14 @@ class ScreenRecorderCore:
                     expected_frames = int(elapsed * config.FPS)
                     frames_missing = expected_frames - frame_count
                     if last_bgr is not None and frames_missing > 0:
+                        pad_elapsed = t_final - t0
                         for _ in range(frames_missing):
                             out.write(last_bgr)
+                            if self._on_frame_written is not None:
+                                try:
+                                    self._on_frame_written(last_bgr, pad_elapsed, True)
+                                except Exception:
+                                    pass
                     out.release()
                 self.recording = False
                 if out is not None:

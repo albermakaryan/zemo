@@ -31,10 +31,10 @@ def test_ensure_recordings_dirs_creates_subdirs(
 ):
     monkeypatch.setattr(cfg, "RECORDINGS_DIR", tmp_path)
     cfg.ensure_recordings_dirs()
-    for sub in (cfg.WEBCAM_SUBDIR, cfg.SCREEN_SUBDIR, cfg.AUDIO_SUBDIR, cfg.GAZE_SUBDIR):
+    for sub in (cfg.WEBCAM_SUBDIR, cfg.SCREEN_SUBDIR, cfg.AUDIO_SUBDIR, cfg.GAZE_SUBDIR, cfg.MOUSE_SUBDIR):
         assert (tmp_path / sub).is_dir()
     assert (tmp_path / ".gitkeep").is_file()
-    for sub in (cfg.WEBCAM_SUBDIR, cfg.SCREEN_SUBDIR, cfg.AUDIO_SUBDIR, cfg.GAZE_SUBDIR):
+    for sub in (cfg.WEBCAM_SUBDIR, cfg.SCREEN_SUBDIR, cfg.AUDIO_SUBDIR, cfg.GAZE_SUBDIR, cfg.MOUSE_SUBDIR):
         assert (tmp_path / sub / ".gitkeep").is_file()
 
 

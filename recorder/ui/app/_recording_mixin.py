@@ -7,6 +7,8 @@ import time
 import threading
 from pathlib import Path
 
+import pyautogui
+
 from PySide6 import QtCore, QtWidgets
 
 from recorder import config
@@ -145,6 +147,8 @@ class RecordingMixin:
         # early is safe.
         self._gaze_csv_file = None
         self._gaze_csv_writer = None
+        self._mouse_csv_file = None
+        self._mouse_csv_writer = None
         self._eye_tracker = None
         gaze_enabled = (
             getattr(self, "_chk_gaze", None) is not None
@@ -240,6 +244,56 @@ class RecordingMixin:
         self._gaze_status_lbl.setStyleSheet(f"color: {config.GREEN};")
         self._btn_calibrate.setEnabled(False)
 
+    def _setup_mouse_csv_for_recording(self, email: str) -> None:
+        """Per screen-encoded frame: log cursor position (same columns as gaze CSV)."""
+        screen_recorder = getattr(self._screen_panel, "recorder", None)
+        screen_dir = config.get_screen_dir()
+        screen_dir.mkdir(parents=True, exist_ok=True)
+        base = email_filename_part(email) if email else "user"
+        predicted = unique_name_with_suffix(
+            screen_dir, base, f"_screen{config.VIDEO_EXT}"
+        )
+        predicted_stem = predicted.stem
+        if "_screen" in predicted_stem:
+            video_id = predicted_stem[: predicted_stem.rfind("_screen")]
+        else:
+            video_id = email
+
+        mouse_dir = config.RECORDINGS_DIR / config.MOUSE_SUBDIR
+        mouse_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = mouse_dir / f"{video_id}_mouse.csv"
+        self._mouse_csv_file = open(csv_path, "w", newline="")
+        self._mouse_csv_writer = csv.writer(self._mouse_csv_file)
+        self._mouse_csv_writer.writerow(
+            ["video_id", "frame_id", "minute", "second", "x", "y"]
+        )
+        frame_counter = [0]
+        start_elapsed = [None]
+        last_xy = [None, None]
+
+        def _mouse_on_frame_written(frame, elapsed, is_padding=False):
+            if self._mouse_csv_writer is None:
+                return
+            if not is_padding:
+                pos = pyautogui.position()
+                x, y = int(pos.x), int(pos.y)
+                last_xy[0], last_xy[1] = x, y
+            else:
+                x, y = last_xy[0], last_xy[1]
+            if start_elapsed[0] is None:
+                start_elapsed[0] = elapsed
+            relative = int(elapsed - start_elapsed[0])
+            self._mouse_csv_writer.writerow(
+                [video_id, frame_counter[0], relative // 60, relative % 60, x, y]
+            )
+            frame_counter[0] += 1
+
+        if screen_recorder is not None:
+            screen_recorder.set_on_frame_written(_mouse_on_frame_written)
+        if getattr(self, "_mouse_status_lbl", None) is not None:
+            self._mouse_status_lbl.setText("+ mouse")
+            self._mouse_status_lbl.setStyleSheet(f"color: {config.GREEN};")
+
     def _start_recorders_barrier_and_audio(self, email: str) -> None:
         use_audio = is_loopback_available()
         num_party = 3 if use_audio else 2
@@ -285,6 +339,12 @@ class RecordingMixin:
             elif eye_tracker is not None:
                 self._eye_tracker = eye_tracker
                 self._setup_gaze_csv_for_recording(email)
+            mouse_enabled = (
+                getattr(self, "_chk_mouse", None) is not None
+                and self._chk_mouse.isChecked()
+            )
+            if mouse_enabled:
+                self._setup_mouse_csv_for_recording(email)
             self._start_recorders_barrier_and_audio(email)
         finally:
             self._recording_start_pending = False
@@ -349,7 +409,12 @@ class RecordingMixin:
         if webcam_recorder is not None:
             webcam_recorder.set_on_frame_written(None)
 
+        screen_recorder = getattr(self._screen_panel, "recorder", None)
+        if screen_recorder is not None:
+            screen_recorder.set_on_frame_written(None)
+
         self._flush_gaze_csv()
+        self._flush_mouse_csv()
 
         if getattr(self, "_auto_mux", False):
             self._dispatch_mux()
@@ -420,6 +485,20 @@ class RecordingMixin:
                 print(f"Gaze CSV close failed: {exc}")
             self._gaze_csv_file = None
 
+    def _flush_mouse_csv(self):
+        """Close the mouse CSV written during recording (one row per saved screen frame)."""
+        if getattr(self, "_mouse_status_lbl", None) is not None:
+            self._mouse_status_lbl.setText("")
+        self._mouse_csv_writer = None
+        f = getattr(self, "_mouse_csv_file", None)
+        if f is not None:
+            try:
+                f.close()
+                print(f"Mouse data saved → {f.name}")
+            except Exception as exc:
+                print(f"Mouse CSV close failed: {exc}")
+            self._mouse_csv_file = None
+
     def _on_calibrate_clicked(self):
         """Stop webcam preview, run Lissajous calibration, then restart preview."""
         self._btn_calibrate.setEnabled(False)
@@ -483,6 +562,7 @@ class RecordingMixin:
         else:
             self._chk_gaze.setToolTip("Calibrate first to enable gaze tracking")
         self._update_gaze_indicator(self._chk_gaze.isChecked())
+        self._update_mouse_indicator(self._chk_mouse.isChecked())
 
         float_win = getattr(self, "_float_win", None)
         if float_win is not None:

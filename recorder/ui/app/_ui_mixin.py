@@ -26,9 +26,11 @@ class UIMixin:
         root_layout.addWidget(self._build_panels())
         root_layout.addWidget(self._build_bottombar())
 
-        # Sync indicator with checkbox initial state and any future changes
+        # Sync indicators with checkbox initial state and any future changes
         self._update_gaze_indicator(self._chk_gaze.isChecked())
         self._chk_gaze.stateChanged.connect(self._on_gaze_checkbox_changed)
+        self._update_mouse_indicator(self._chk_mouse.isChecked())
+        self._chk_mouse.stateChanged.connect(self._on_mouse_checkbox_changed)
 
     def _build_topbar(self) -> QtWidgets.QFrame:
         topbar = QtWidgets.QFrame(self._central)
@@ -74,7 +76,7 @@ class UIMixin:
         self._btn_settings.setCheckable(True)
         self._btn_settings.setChecked(False)
         self._btn_settings.setFixedSize(34, 34)
-        self._btn_settings.setToolTip("Show or hide the gaze & settings panel")
+        self._btn_settings.setToolTip("Show or hide the gaze, mouse & settings panel")
         self._btn_settings.setStyleSheet(
             f"""
             QPushButton {{
@@ -155,6 +157,27 @@ class UIMixin:
         self._gaze_status_lbl.setFont(mono_sm)
         self._gaze_status_lbl.setStyleSheet(f"color: {config.MUTED}; border: none;")
         sp_layout.addWidget(self._gaze_status_lbl)
+
+        lbl_mouse = QtWidgets.QLabel("MOUSE", self._settings_panel)
+        lbl_mouse.setFont(QtGui.QFont("Courier New", 9, QtGui.QFont.Weight.Bold))
+        lbl_mouse.setStyleSheet(f"color: {config.FG2}; border: none;")
+        sp_layout.addWidget(lbl_mouse)
+
+        self._chk_mouse = QtWidgets.QCheckBox("Enable", self._settings_panel)
+        self._chk_mouse.setFont(mono_sm)
+        self._chk_mouse.setStyleSheet(f"color: {config.FG}; border: none;")
+        self._chk_mouse.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._chk_mouse.setEnabled(True)
+        self._chk_mouse.setChecked(True)
+        self._chk_mouse.setToolTip(
+            "Save cursor coordinates per recorded screen frame (CSV under recordings/mouse/)"
+        )
+        sp_layout.addWidget(self._chk_mouse)
+
+        self._mouse_status_lbl = QtWidgets.QLabel("", self._settings_panel)
+        self._mouse_status_lbl.setFont(mono_sm)
+        self._mouse_status_lbl.setStyleSheet(f"color: {config.MUTED}; border: none;")
+        sp_layout.addWidget(self._mouse_status_lbl)
 
         sp_layout.addStretch(1)
 
@@ -273,6 +296,11 @@ class UIMixin:
         self._gaze_indicator_lbl.setStyleSheet(f"color: {config.MUTED}; margin-left: 8px;")
         layout.addWidget(self._gaze_indicator_lbl)
 
+        self._mouse_indicator_lbl = QtWidgets.QLabel("", bottom)
+        self._mouse_indicator_lbl.setFont(mono_sm)
+        self._mouse_indicator_lbl.setStyleSheet(f"color: {config.MUTED}; margin-left: 8px;")
+        layout.addWidget(self._mouse_indicator_lbl)
+
         self._email_lbl = QtWidgets.QLabel("", bottom)
         self._email_lbl.setFont(mono_sm)
         self._email_lbl.setStyleSheet(f"color: {config.MUTED}; margin-left: 8px;")
@@ -288,6 +316,11 @@ class UIMixin:
         if hasattr(self, "_update_start_controls_enabled"):
             self._update_start_controls_enabled()
 
+    def _on_mouse_checkbox_changed(self, state: int) -> None:
+        self._update_mouse_indicator(bool(state))
+        if hasattr(self, "_update_start_controls_enabled"):
+            self._update_start_controls_enabled()
+
     def _update_gaze_indicator(self, enabled: bool):
         """Update the bottom-bar gaze indicator to reflect current setting."""
         if enabled:
@@ -295,6 +328,14 @@ class UIMixin:
             self._gaze_indicator_lbl.setStyleSheet(f"color: {config.GREEN}; margin-left: 8px;")
         else:
             self._gaze_indicator_lbl.setText("")
+
+    def _update_mouse_indicator(self, enabled: bool):
+        """Update the bottom-bar mouse indicator to reflect current setting."""
+        if enabled:
+            self._mouse_indicator_lbl.setText("+ mouse")
+            self._mouse_indicator_lbl.setStyleSheet(f"color: {config.GREEN}; margin-left: 8px;")
+        else:
+            self._mouse_indicator_lbl.setText("")
 
     # ------------------------------------------------------------------
     # Window helpers
