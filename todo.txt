@@ -1,0 +1,21 @@
+Main check (window close / hard close)
+--------------------------------------
+- On close (X) and any path that would exit the app: determine whether video
+  output is complete — i.e. recording is fully stopped and webcam/screen writer
+  threads have finished finalizing (including out.release / moov written).
+- If not complete: show a clear message that the video is not finished yet and
+  the program cannot be closed until it is (or until the user explicitly stops
+  recording and finalization finishes). Do not quit in that state.
+
+Other checks
+------------
+- Prefer normal Stop before closing; avoid Task Manager / kill while recording.
+- After Stop, allow time for writer threads to join before treating shutdown as safe.
+- Before muxing or analyzing: ffmpeg -v error -i <file.mp4> -f null - (or
+  project probe). Skip invalid files.
+- Enough disk space; avoid sleep/hibernate mid-record; suspect MP4s after crashes.
+
+Optional hardening (future)
+---------------------------
+- Non-daemon recorder threads + guaranteed shutdown join, or ffmpeg-based
+  capture with better abrupt-exit behavior.

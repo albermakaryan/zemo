@@ -35,6 +35,20 @@ Desktop app to record screen and/or webcam as MP4, with a floating movable start
    pip install -e ".[windows]"
    ```
 
+   **Option C – [uv](https://docs.astral.sh/uv/) (uses `pyproject.toml` + `uv.lock`):**
+   ```bash
+   uv sync
+   ```
+   This installs the app’s runtime dependencies plus the **dev** group (pytest, pre-commit, etc.). For a smaller environment without those tools (e.g. CI or packaging), run:
+   ```bash
+   uv sync --no-dev
+   ```
+
+## Development (tests & tooling)
+
+- With **uv**: `uv sync` (includes the `dev` group), then e.g. `uv run pytest` or `python -m pytest`.
+- With **pip**: install the project editable (`pip install -e .`); add `pytest`, `pytest-cov`, etc. manually if you need them (`requirements.txt` lists only runtime libraries for the recorder).
+
 ## Run
 
 - **Windows (GUI):** double-click `run_recorder.bat`
@@ -177,6 +191,7 @@ Play a video in the browser while it runs; the WAV should contain that audio. Li
 
 - **Countdown length:** edit `COUNTDOWN_SECONDS` in `recorder/config.py`.
 - **Gaze model path:** edit `GAZE_ESTIMATOR_PATH` in `recorder/config.py` (default: `gaze_model.pkl` next to the app).
+- **Webcam capture size:** `WEBCAM_PREFERRED_WIDTH` / `WEBCAM_PREFERRED_HEIGHT` in `recorder/config.py` default to `None` (native camera resolution). Set both to a supported pair (e.g. `1280` and `720`) if you want a fixed mode; avoid matching full monitor dimensions unless your camera truly supports that mode, or you may see letterboxing.
 - **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, `audio/`, and `gaze/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
 
 ## License

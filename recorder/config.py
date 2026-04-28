@@ -4,7 +4,6 @@ Configuration and constants for the recorder app.
 
 import sys
 from pathlib import Path
-import pyautogui as pg
 
 # Project root: when frozen (PyInstaller exe), use the folder containing the exe
 if getattr(sys, "frozen", False):
@@ -20,6 +19,7 @@ SCREEN_SUBDIR = "screen"
 AUDIO_SUBDIR = "audio"
 DETECTION_SUBDIR = "detection"
 GAZE_SUBDIR = "gaze"
+MOUSE_SUBDIR = "mouse"
 
 GAZE_ESTIMATOR_PATH = PROJECT_ROOT / "gaze_model.pkl"
 
@@ -85,7 +85,7 @@ def ensure_recordings_dirs() -> None:
     """Create recordings base and subfolders if they don't exist."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     (RECORDINGS_DIR / ".gitkeep").touch(exist_ok=True)
-    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR, GAZE_SUBDIR):
+    for sub in (WEBCAM_SUBDIR, SCREEN_SUBDIR, AUDIO_SUBDIR, GAZE_SUBDIR, MOUSE_SUBDIR):
         subdir = RECORDINGS_DIR / sub
         subdir.mkdir(parents=True, exist_ok=True)
         (subdir / ".gitkeep").touch(exist_ok=True)
@@ -117,7 +117,7 @@ PREVIEW_H = 225
 # Target output FPS: `FPS` is the value used at import time, then it is *replaced* on app startup
 # by the last value from Settings (QSettings) if present. The file value is only the default
 # for a brand-new install. Use DEFAULT_FPS for that baseline everywhere (do not read FPS before load).
-DEFAULT_FPS = 15
+DEFAULT_FPS = 10
 FPS = DEFAULT_FPS
 FPS_MIN = 5
 FPS_MAX = 30
@@ -137,9 +137,10 @@ MONITOR_INDEX = 1
 # - True: always flip  - False: never  - "auto": use heuristics in recorder.core.webcam (Windows on by default there).
 WEBCAM_FLIP_HORIZONTAL = "auto"
 # Requested capture resolution after opening the camera. The driver picks the closest supported mode
-# (e.g. 1280×720 if 1080p is unavailable). None = leave default (often 640×480 on Windows).
-WEBCAM_PREFERRED_WIDTH = pg.size().width
-WEBCAM_PREFERRED_HEIGHT = pg.size().height
+# (e.g. 1280×720 if 1080p is unavailable). None = leave default (native mode; avoids letterboxing
+# from forcing monitor-sized capture when the sensor aspect differs).
+WEBCAM_PREFERRED_WIDTH = None
+WEBCAM_PREFERRED_HEIGHT = None
 # Use mp4v first (no extra DLLs). H.264 needs OpenH264 on Windows and often fails.
 VIDEO_FOURCC_TRY_ORDER = ("mp4v",)
 COUNTDOWN_SECONDS = 5
