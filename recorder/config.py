@@ -117,7 +117,7 @@ PREVIEW_H = 225
 # Target output FPS: `FPS` is the value used at import time, then it is *replaced* on app startup
 # by the last value from Settings (QSettings) if present. The file value is only the default
 # for a brand-new install. Use DEFAULT_FPS for that baseline everywhere (do not read FPS before load).
-DEFAULT_FPS = 10
+DEFAULT_FPS = 15
 FPS = DEFAULT_FPS
 FPS_MIN = 5
 FPS_MAX = 30
