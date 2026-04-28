@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Webcam recordings – black bars / padding** (`recorder/config.py`): `WEBCAM_PREFERRED_WIDTH` and `WEBCAM_PREFERRED_HEIGHT` now default to `None` so OpenCV uses the camera’s native mode. They previously matched the primary monitor size (via `pyautogui`), which pushed many drivers to letterbox the sensor image inside a display-shaped frame.
+
+### Changed
+
+- **Development dependencies** (`pyproject.toml`): `pytest`, `pytest-mock`, `pytest-cov`, `pre-commit`, and `pip` are listed under `[dependency-groups] dev`. [uv](https://docs.astral.sh/uv/) includes that group on a normal `uv sync` and omits it on `uv sync --no-dev`. The `[project.optional-dependencies] dev` extra was removed; optional extras `windows` and `linux` are unchanged.
+
 ### Added
 
 - **`build_exe.bat --test`** (or `test`): test build that does **not** bump `VERSION`, does **not** overwrite `VERSION`, and skips regenerating `version_info.txt` when that file already exists (so release metadata stays unchanged). Output is copied to **`dist\Recorder_test.exe`** instead of `dist\Recorder_<version>.exe`. Use for local verification before a versioned release.
@@ -50,3 +58,4 @@ Keeping **`"auto"`** as the default avoids hard-coding `sys.platform` in `config
 ### Documentation
 
 - **`README.md`**, **`docs/USER_MANUAL.md`**, and **`CHANGELOG.md`**: document **`build_exe.bat --test`**, the **eyetrax** PyInstaller hook, **async gaze loading** and **⏳** on the float button, the **gaze / email / countdown** order, **Record Both** busy-state behavior, **Python 3.12+**, and troubleshooting for frozen calibration.
+- **`README.md`**: **uv** install (`uv sync`, `uv sync --no-dev`), **Development** (tests / dev deps), and **Configuration** for webcam `WEBCAM_PREFERRED_*` defaults.
