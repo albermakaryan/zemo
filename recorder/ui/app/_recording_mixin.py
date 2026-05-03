@@ -1,6 +1,7 @@
 """RecordingMixin: record_both, stop_both, mux dispatch, audio callbacks."""
 
 import csv
+import queue
 import sys
 import subprocess
 import time
@@ -217,25 +218,46 @@ class RecordingMixin:
         self._gaze_csv_writer.writerow(
             ["video_id", "frame_id", "minute", "second", "x", "y"]
         )
-        frame_counter = [0]
-        start_elapsed = [None]
-        last_gaze = [None, None]
+
+        # Gaze inference (MediaPipe) can take 30-100 ms per frame. Running it
+        # synchronously in the recording loop causes the webcam thread to miss
+        # its frame-interval deadline, leaving expected_frames >> frame_count and
+        # producing large blocks of padding at the end. A dedicated worker thread
+        # drains a queue of copied frames so the webcam loop is never stalled.
+        gq: queue.SimpleQueue = queue.SimpleQueue()
+        self._gaze_queue = gq
         tr = self._eye_tracker
+        writer = self._gaze_csv_writer  # direct ref so worker isn't affected by self mutation
+
+        def _gaze_worker():
+            last_gaze = [None, None]
+            start_elapsed = [None]
+            fcount = [0]
+            while True:
+                item = gq.get()
+                if item is None:  # sentinel: drain complete
+                    break
+                frm, elapsed, is_pad = item
+                if not is_pad:
+                    x, y = tr.track_eyes(frm)
+                    last_gaze[0], last_gaze[1] = x, y
+                else:
+                    x, y = last_gaze[0], last_gaze[1]
+                if start_elapsed[0] is None:
+                    start_elapsed[0] = elapsed
+                relative = int(elapsed - start_elapsed[0])
+                writer.writerow([video_id, fcount[0], relative // 60, relative % 60, x, y])
+                fcount[0] += 1
+
+        self._gaze_worker_thread = threading.Thread(target=_gaze_worker, daemon=True)
+        self._gaze_worker_thread.start()
+
+        frame_counter = [0]
 
         def _gaze_on_frame_written(frame, elapsed, is_padding=False):
-            if self._gaze_csv_writer is None:
-                return
-            if not is_padding:
-                x, y = tr.track_eyes(frame)
-                last_gaze[0], last_gaze[1] = x, y
-            else:
-                x, y = last_gaze[0], last_gaze[1]
-            if start_elapsed[0] is None:
-                start_elapsed[0] = elapsed
-            relative = int(elapsed - start_elapsed[0])
-            self._gaze_csv_writer.writerow(
-                [video_id, frame_counter[0], relative // 60, relative % 60, x, y]
-            )
+            if self._gaze_queue is not None:
+                # Copy the frame: the webcam loop may reuse the buffer on the next iteration.
+                gq.put((frame.copy(), elapsed, is_padding))
             frame_counter[0] += 1
 
         if webcam_recorder is not None:
@@ -466,8 +488,7 @@ class RecordingMixin:
     # ------------------------------------------------------------------
 
     def _flush_gaze_csv(self):
-        """Close the gaze CSV file that was written row-by-row during recording."""
-        # Re-enable calibrate button and clear status regardless of outcome
+        """Drain the gaze worker, then close the CSV. Must be called after the webcam thread has joined."""
         if getattr(self, "_btn_calibrate", None) is not None:
             self._btn_calibrate.setEnabled(True)
         if getattr(self, "_gaze_status_lbl", None) is not None:
@@ -475,6 +496,16 @@ class RecordingMixin:
 
         self._eye_tracker = None
         self._gaze_csv_writer = None
+
+        # Signal the worker to finish draining whatever is already queued, then wait.
+        gq = getattr(self, "_gaze_queue", None)
+        if gq is not None:
+            gq.put(None)  # sentinel
+            self._gaze_queue = None
+        wt = getattr(self, "_gaze_worker_thread", None)
+        if wt is not None:
+            wt.join(timeout=30.0)
+            self._gaze_worker_thread = None
 
         f = getattr(self, "_gaze_csv_file", None)
         if f is not None:
