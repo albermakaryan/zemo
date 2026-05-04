@@ -25,6 +25,8 @@ Screen & Webcam Recorder: record your screen and webcam as separate MP4 files, w
 - **Webcam**: records your camera (e.g. face) as MP4.
 - **Screen**: records your monitor (full screen or primary display) as MP4.
 - **Audio** (Windows): records **system/computer audio** (what you hear) when available; typically **`.mka`** (Matroska audio) when PyAV is installed, else **`.wav`**; can be muxed into the screen video with ffmpeg (see main README).
+- **Gaze CSV** (`recordings/gaze/`): per-frame eye-gaze coordinates with sub-second timestamps (`elapsed_s`) and a padding flag (`is_padding`). Raw predictions are Kalman-smoothed before saving.
+- **Mouse CSV** (`recordings/mouse/`): per-frame cursor coordinates with the same column layout as the gaze CSV.
 - Recordings are **synced** (webcam and screen start/stop together) and saved with your **email** in the filename (e.g. `user@example.com_webcam.mp4`).
 
 ---
@@ -109,7 +111,8 @@ Inside **`recordings`** you will find:
 | `webcam/`| Webcam MP4 files (e.g. `user@example.com_webcam.mp4`) |
 | `screen/`| Screen MP4 files (e.g. `user@example.com_screen.mp4`) |
 | `audio/` | System audio (often `.mka` with PyAV, or `.wav` fallback) |
-| `gaze/`  | Gaze CSV files when gaze tracking is used (see main README) |
+| `gaze/`  | Gaze CSV files when gaze tracking is used (`<email>_gaze.csv`) |
+| `mouse/` | Mouse cursor CSV files per recording (`<email>_mouse.csv`) |
 
 You can change the **save location** using the **📁** button in the main window (before or after recording). The folder you choose will contain `webcam/`, `screen/`, and `audio/` subfolders.
 
@@ -143,7 +146,7 @@ If you run from source, you can edit **`recorder/config.py`** to change:
 | Setting              | Meaning                          | Default |
 |----------------------|----------------------------------|---------|
 | `COUNTDOWN_SECONDS`  | Seconds before recording starts  | 5       |
-| `FPS`                | Target frames per second         | 25      |
+| `DEFAULT_FPS`        | Target frames per second (baseline for new installs) | 15 |
 | `CAMERA_INDEX`       | Webcam device (0 = first)        | 0       |
 | `MONITOR_INDEX`      | Monitor to capture (1 = primary)  | 1       |
 | `RECORDING_WIDTH` / `RECORDING_HEIGHT` | Force same size for webcam and screen | None (use source size) |
@@ -243,15 +246,20 @@ Both write frames to an MP4 via `cv2.VideoWriter` at the configured `FPS`, and p
 
 When gaze is active, before the barrier fires, a callback `_gaze_on_frame_written` is attached via `webcam_recorder.set_on_frame_written(...)`. It runs once per encoded webcam frame (immediately after each `out.write`), including padding frames at shutdown:
 
-1. `EyeTracker.track_eyes(frame)` returns the `(x, y)` gaze coordinate.
-2. The timestamp is expressed as `(minute, second)` relative to recording start.
-3. One row is appended to a CSV at `recordings/gaze/<email>_gaze.csv`:
+1. `EyeTracker.track_eyes(frame)` returns the raw `(x, y)` gaze coordinate.
+2. The raw coordinate is passed through a `cv2.KalmanFilter` (from `eyetrax.make_kalman()`) to reduce per-frame noise. Skipped gracefully if `make_kalman` is unavailable.
+3. The timestamp is expressed as `(minute, second)` integers and `elapsed_s` float (seconds since first frame, 4 decimal places), relative to recording start.
+4. One row is appended to a CSV at `recordings/gaze/<email>_gaze.csv`:
 
 ```
-video_id, frame_id, minute, second, x, y
+video_id, frame_id, minute, second, elapsed_s, x, y, is_padding
 ```
 
-When recording stops, `_flush_gaze_csv()` closes and flushes the file.
+`is_padding` is `1` for synthetic fill frames (blink / no face), `0` for real gaze data. Padding rows are always written so `frame_id` stays aligned with the video frame index.
+
+A matching cursor CSV is written to `recordings/mouse/<email>_mouse.csv` with the same columns (cursor position sampled once per webcam frame via `ctypes.windll.user32.GetCursorPos` on Windows, or `pyautogui.position()` on other platforms).
+
+When recording stops, `_flush_gaze_csv()` and `_flush_mouse_csv()` close and flush both files. The same flush runs on window close (`closeEvent`) to prevent data loss if the user closes the app while recording.
 
 #### Step 5 – Audio recording (Windows only)
 
@@ -266,8 +274,8 @@ An `InternalAudioRecorder` captures **system loopback audio** (what you hear) an
 1. Captures a single `stop_time = time.time()` and passes it to every recorder's `.stop()` call so they all share the same intended end time.
 2. Joins webcam, screen, and audio threads in parallel (`_join_recorders_concurrent`) so the UI doesn't block.
 3. Clears `set_on_frame_written` only *after* the webcam thread fully finishes (including padding frames).
-4. Calls `_flush_gaze_csv()` to close the CSV.
-5. Kicks off the ffmpeg mux in a background thread if audio is present.
+4. Calls `_flush_gaze_csv()` and `_flush_mouse_csv()` to close both CSVs.
+5. Kicks off the ffmpeg mux in a background thread if audio is present (with a 5-second delay to let the OS flush the screen MP4 before muxing).
 
 ---
 

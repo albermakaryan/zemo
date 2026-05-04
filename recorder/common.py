@@ -2,44 +2,12 @@
 Shared utilities for video recording: writer helpers, time/name formatting, frame resize.
 """
 
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import cv2
 
 from recorder import config
-
-
-def open_webcam(
-    preferred_index: Optional[int] = None,
-    fallback_indices: Optional[List[int]] = None,
-) -> Tuple[Optional["cv2.VideoCapture"], int]:
-    """
-    Open the first available webcam. Tries preferred_index, then fallback_indices.
-    Returns (cap, index_used). Caller must cap.release(). Returns (None, -1) if none open.
-    On Linux if no device opens, ensure user is in the 'video' group: sudo usermod -aG video $USER.
-    """
-    if preferred_index is None:
-        preferred_index = getattr(config, "CAMERA_INDEX", 0)
-    if fallback_indices is None:
-        fallback_indices = [
-            0,
-            1,
-        ]  # avoid index 2 when only 2 devices exist (nb_devices=2)
-    indices = [preferred_index] + [i for i in fallback_indices if i != preferred_index]
-
-    for idx in indices:
-        if sys.platform == "win32" and hasattr(cv2, "CAP_MSMF"):
-            cap = cv2.VideoCapture(int(idx), cv2.CAP_MSMF)
-        else:
-            cap = cv2.VideoCapture(int(idx))
-        if cap is not None and cap.isOpened():
-            return (cap, idx)
-        if cap is not None:
-            cap.release()
-    return (None, -1)
 
 
 def make_even(v: int) -> int:
@@ -56,18 +24,6 @@ def create_writer(path: str, fourcc_str: str, fps: float, w: int, h: int):
 
 def timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
-
-
-def sanitize_email_for_filename(email: str) -> str:
-    """Make email safe for use in filenames: e.g. a.b@c.edu -> a_b_at_c_edu."""
-    if not email or not isinstance(email, str):
-        return ""
-    s = email.strip().lower()
-    s = s.replace("@", "_at_")
-    s = s.replace(".", "_")
-    allowed = "abcdefghijklmnopqrstuvwxyz0123456789_at"
-    s = "".join(c for c in s if c in allowed)
-    return s or "user"
 
 
 def email_filename_part(email: str) -> str:
@@ -113,9 +69,3 @@ def resize_frame(frame, w: int, h: int):
     return cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
 
 
-def frame_to_tk(frame):
-    from PIL import Image, ImageTk
-
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    img = Image.fromarray(rgb)
-    return ImageTk.PhotoImage(img)

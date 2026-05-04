@@ -63,9 +63,3 @@ class EyeTracker:
             return float(x), float(y)
         return None, None
 
-    def destroy(self) -> None:
-        """Delete the saved calibration model file from disk."""
-        try:
-            os.remove(self._model_path)
-        except OSError:
-            pass

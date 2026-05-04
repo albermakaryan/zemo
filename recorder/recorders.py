@@ -10,9 +10,7 @@ Utility helpers live in:
 
 from recorder.common import (
     fmt_time,
-    frame_to_tk,
     resize_frame,
-    sanitize_email_for_filename,
     timestamp,
 )
 from recorder.core.screen import ScreenRecorderCore as ScreenRecorder
@@ -22,8 +20,6 @@ __all__ = [
     "WebcamRecorder",
     "ScreenRecorder",
     "fmt_time",
-    "frame_to_tk",
     "resize_frame",
     "timestamp",
-    "sanitize_email_for_filename",
 ]
