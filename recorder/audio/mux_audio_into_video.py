@@ -18,7 +18,6 @@ Output (--screen-only):
 
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 _root = Path(__file__).resolve().parent.parent.parent

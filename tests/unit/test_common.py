@@ -1,7 +1,6 @@
 """Unit tests for `recorder.common` (pure helpers; I/O paths mocked or minimal)."""
 
 import re
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,11 +12,8 @@ from recorder.common import (
     create_writer,
     email_filename_part,
     fmt_time,
-    frame_to_tk,
     make_even,
-    open_webcam,
     resize_frame,
-    sanitize_email_for_filename,
     unique_name_with_suffix,
 )
 
@@ -29,14 +25,6 @@ def test_make_even():
     assert make_even(3) == 2
     assert make_even(7) == 6
     assert make_even(100) == 100
-
-
-def test_sanitize_email_for_filename():
-    assert sanitize_email_for_filename("a.b@c.edu") == "a_b_at_c_edu"
-    assert sanitize_email_for_filename("  A@B.C  ") == "a_at_b_c"
-    assert sanitize_email_for_filename("") == ""
-    assert sanitize_email_for_filename(None) == ""  # type: ignore[arg-type]
-    assert sanitize_email_for_filename(42) == ""  # type: ignore[arg-type]
 
 
 def test_email_filename_part():
@@ -108,73 +96,11 @@ def test_create_writer_fails_to_open():
     assert out is writer
 
 
-def test_open_webcam_first_index_opens():
-    good = MagicMock()
-    good.isOpened.return_value = True
-    with patch.object(common.cv2, "VideoCapture", return_value=good) as vc:
-        cap, idx = open_webcam(preferred_index=0, fallback_indices=[1])
-    assert cap is good
-    assert idx == 0
-    vc.assert_called_once()
-
-
-def test_open_webcam_tries_fallback_when_first_closed():
-    bad = MagicMock()
-    bad.isOpened.return_value = False
-    good = MagicMock()
-    good.isOpened.return_value = True
-    with patch.object(common.cv2, "VideoCapture", side_effect=[bad, good]) as vc:
-        cap, idx = open_webcam(preferred_index=0, fallback_indices=[0, 1])
-    assert cap is good
-    assert idx == 1
-    bad.release.assert_called_once()
-    assert vc.call_count == 2
-
-
-def test_open_webcam_releases_on_failure():
-    bad = MagicMock()
-    bad.isOpened.return_value = False
-    with patch.object(common.cv2, "VideoCapture", return_value=bad):
-        cap, idx = open_webcam(preferred_index=0, fallback_indices=[0])
-    assert cap is None
-    assert idx == -1
-    bad.release.assert_called_once()
-
-
-def test_open_webcam_uses_msmf_on_windows_second_arg():
-    if sys.platform != "win32":
-        pytest.skip("MSMF branch is Windows-only")
-    cv2 = pytest.importorskip("cv2", reason="opencv-python not installed")
-    if not hasattr(cv2, "CAP_MSMF"):
-        pytest.skip("OpenCV build has no CAP_MSMF")
-    good = MagicMock()
-    good.isOpened.return_value = True
-    with patch.object(common.cv2, "VideoCapture", return_value=good) as vc:
-        cap, idx = open_webcam(preferred_index=0, fallback_indices=[])
-    assert cap is good
-    assert idx == 0
-    assert vc.call_args[0][0] == 0
-    assert vc.call_args[0][1] == cv2.CAP_MSMF
-
-
 def test_resize_frame():
     pytest.importorskip("cv2", reason="opencv-python not installed")
     frame = np.zeros((20, 30, 3), dtype=np.uint8)
     out = resize_frame(frame, 10, 8)
     assert out.shape == (8, 10, 3)
-
-
-@patch("PIL.ImageTk.PhotoImage")
-@patch("PIL.Image.fromarray")
-def test_frame_to_tk_uses_pil(pil_fromarray, photo_image):
-    pytest.importorskip("cv2", reason="opencv-python not installed")
-    mock_img = MagicMock()
-    pil_fromarray.return_value = mock_img
-    ph = MagicMock()
-    photo_image.return_value = ph
-    frame = np.zeros((2, 2, 3), dtype=np.uint8)
-    assert frame_to_tk(frame) is ph
-    photo_image.assert_called_once_with(mock_img)
 
 
 def test_timestamp_format():

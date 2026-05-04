@@ -64,7 +64,7 @@ from recorder.config import (
     RECORDINGS_DIR,
     WEBCAM_SUBDIR,
     SCREEN_SUBDIR,
-    FPS as EXPECTED_FPS,
+    DEFAULT_FPS as EXPECTED_FPS,
 )
 
 

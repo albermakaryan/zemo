@@ -59,6 +59,8 @@ class App(UIMixin, RecordingMixin, QtWidgets.QMainWindow):
         if getattr(self, "_audio_recorder", None) and self._audio_recorder.recording:
             self._audio_recorder.stop(stop_time=stop_time)
         self._join_recorders_concurrent(timeout=5.0)
+        self._flush_gaze_csv()
+        self._flush_mouse_csv()
 
         if getattr(self, "_float_win", None):
             self._float_win.close()

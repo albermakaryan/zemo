@@ -1,6 +1,7 @@
 """RecordingMixin: record_both, stop_both, mux dispatch, audio callbacks."""
 
 import csv
+import ctypes
 import queue
 import sys
 import subprocess
@@ -8,7 +9,23 @@ import time
 import threading
 from pathlib import Path
 
-import pyautogui
+
+if sys.platform == "win32":
+    class _POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    def _cursor_pos():
+        pt = _POINT()
+        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+        return pt.x, pt.y
+else:
+    def _cursor_pos():
+        try:
+            import pyautogui
+            pos = pyautogui.position()
+            return pos.x, pos.y
+        except Exception:
+            return 0, 0
 
 from PySide6 import QtCore, QtWidgets
 
@@ -216,7 +233,7 @@ class RecordingMixin:
         self._gaze_csv_file = open(csv_path, "w", newline="")
         self._gaze_csv_writer = csv.writer(self._gaze_csv_file)
         self._gaze_csv_writer.writerow(
-            ["video_id", "frame_id", "minute", "second", "x", "y"]
+            ["video_id", "frame_id", "minute", "second", "elapsed_s", "x", "y", "is_padding"]
         )
 
         # Gaze inference (MediaPipe) can take 30-100 ms per frame. Running it
@@ -233,6 +250,13 @@ class RecordingMixin:
             last_gaze = [None, None]
             start_elapsed = [None]
             fcount = [0]
+            try:
+                from eyetrax import make_kalman
+                import numpy as _np
+                kf = make_kalman()
+            except (ImportError, AttributeError):
+                kf = None
+                _np = None
             while True:
                 item = gq.get()
                 if item is None:  # sentinel: drain complete
@@ -240,25 +264,32 @@ class RecordingMixin:
                 frm, elapsed, is_pad = item
                 if not is_pad:
                     x, y = tr.track_eyes(frm)
+                    if kf is not None and x is not None and y is not None:
+                        measurement = _np.array([[float(x)], [float(y)]], dtype=_np.float32)
+                        kf.predict()
+                        corrected = kf.correct(measurement)
+                        x, y = float(corrected[0, 0]), float(corrected[1, 0])
                     last_gaze[0], last_gaze[1] = x, y
                 else:
                     x, y = last_gaze[0], last_gaze[1]
                 if start_elapsed[0] is None:
                     start_elapsed[0] = elapsed
-                relative = int(elapsed - start_elapsed[0])
-                writer.writerow([video_id, fcount[0], relative // 60, relative % 60, x, y])
+                relative = elapsed - start_elapsed[0]
+                writer.writerow([
+                    video_id, fcount[0],
+                    int(relative) // 60, int(relative) % 60,
+                    round(relative, 4),
+                    x, y, int(is_pad),
+                ])
                 fcount[0] += 1
 
         self._gaze_worker_thread = threading.Thread(target=_gaze_worker, daemon=True)
         self._gaze_worker_thread.start()
 
-        frame_counter = [0]
-
         def _gaze_on_frame_written(frame, elapsed, is_padding=False):
             if self._gaze_queue is not None:
                 # Copy the frame: the webcam loop may reuse the buffer on the next iteration.
                 gq.put((frame.copy(), elapsed, is_padding))
-            frame_counter[0] += 1
 
         if webcam_recorder is not None:
             webcam_recorder.set_on_frame_written(_gaze_on_frame_written)
@@ -287,7 +318,7 @@ class RecordingMixin:
         self._mouse_csv_file = open(csv_path, "w", newline="")
         self._mouse_csv_writer = csv.writer(self._mouse_csv_file)
         self._mouse_csv_writer.writerow(
-            ["video_id", "frame_id", "minute", "second", "x", "y"]
+            ["video_id", "frame_id", "minute", "second", "elapsed_s", "x", "y", "is_padding"]
         )
         frame_counter = [0]
         start_elapsed = [None]
@@ -297,16 +328,16 @@ class RecordingMixin:
             if self._mouse_csv_writer is None:
                 return
             if not is_padding:
-                pos = pyautogui.position()
-                x, y = int(pos.x), int(pos.y)
+                x, y = _cursor_pos()
                 last_xy[0], last_xy[1] = x, y
             else:
                 x, y = last_xy[0], last_xy[1]
             if start_elapsed[0] is None:
                 start_elapsed[0] = elapsed
-            relative = int(elapsed - start_elapsed[0])
+            relative = elapsed - start_elapsed[0]
             self._mouse_csv_writer.writerow(
-                [video_id, frame_counter[0], relative // 60, relative % 60, x, y]
+                [video_id, frame_counter[0], int(relative) // 60, int(relative) % 60,
+                 round(relative, 4), x, y, int(is_padding)]
             )
             frame_counter[0] += 1
 
@@ -319,12 +350,7 @@ class RecordingMixin:
     def _start_recorders_barrier_and_audio(self, email: str) -> None:
         use_audio = is_loopback_available()
         num_party = 3 if use_audio else 2
-        shared_start_time = [None]
-
-        def set_shared_t0():
-            shared_start_time[0] = time.time()
-
-        barrier = threading.Barrier(num_party, action=set_shared_t0)
+        barrier = threading.Barrier(num_party)
 
         self._webcam_panel._start_recording(start_barrier=barrier, email=email)
         self._screen_panel._start_recording(start_barrier=barrier, email=email)
@@ -339,7 +365,6 @@ class RecordingMixin:
             self._audio_recorder.start(
                 save_dir=str(config.get_audio_dir()),
                 start_barrier=barrier,
-                start_time_ref=shared_start_time,
                 email=email,
             )
             self._audio_status_lbl.setText("+ audio")
@@ -662,11 +687,9 @@ class RecordingMixin:
         out_dir = config.RECORDINGS_DIR / "screen_with_audio"
 
         try:
-            # Small delay so the screen MP4 is fully written before
-            # the CLI helper probes and muxes it.
-            print("Waiting for screen video to be fully written...")
-            time.sleep(60)
-            print("Done waiting.")
+            # Recorders are already joined before _dispatch_mux is called;
+            # a short margin covers any OS-level file flush.
+            time.sleep(5)
             cmd = [sys.executable, "-m", "recorder.audio.mux_audio_into_video", "--screen-only", email]
             print(f"Muxing:\n  Video : {screen_p}\n  Audio : {audio_p}")
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

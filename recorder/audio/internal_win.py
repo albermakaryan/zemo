@@ -35,13 +35,17 @@ except ImportError:
     _HAS_PYAUDIOWPATCH = False
 
 try:
-    import av as _av
     import numpy as _np
+    _HAS_NUMPY = True
+except ImportError:
+    _np = None
+    _HAS_NUMPY = False
 
-    _HAS_AV = True
+try:
+    import av as _av
+    _HAS_AV = True and _HAS_NUMPY
 except ImportError:
     _av = None
-    _np = None
     _HAS_AV = False
 
 
@@ -59,6 +63,8 @@ def is_loopback_available() -> bool:
 
 def _is_silent(raw: bytes, threshold: int = 50) -> bool:
     """True if every sample in the raw PCM buffer is below threshold (16-bit signed)."""
+    if _np is not None:
+        return int(_np.abs(_np.frombuffer(raw, dtype=_np.int16)).max()) < threshold
     import struct
     samples = struct.unpack(f"{len(raw) // 2}h", raw)
     return max(abs(s) for s in samples) < threshold

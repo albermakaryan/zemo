@@ -10,7 +10,8 @@ Desktop app to record screen and/or webcam as MP4, with a floating movable start
 - **Gaze tracking**: per-frame eye-gaze estimation via eyetrax; saved as a CSV alongside recordings
 - **Floating button** window (always on top, draggable to any monitor) with one big Start/Stop
 - **Countdown** before recording starts (default 5 seconds, configurable)
-- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, `recordings/audio/`, and `recordings/gaze/`
+- **Mouse tracking**: per-frame cursor position saved alongside recordings as a CSV
+- **Recordings** saved under `recordings/webcam/`, `recordings/screen/`, `recordings/audio/`, `recordings/gaze/`, and `recordings/mouse/`
 
 ## Requirements
 
@@ -105,13 +106,21 @@ Each recording session produces `recordings/gaze/<email>_gaze.csv` with columns:
 | Column | Description |
 |---|---|
 | `video_id` | User email |
-| `frame_id` | 0-based frame counter (only increments on successful gaze detections) |
+| `frame_id` | 0-based frame counter |
 | `minute` | Integer minutes since first gaze frame |
 | `second` | Integer seconds within the current minute |
-| `x` | Estimated screen X coordinate |
-| `y` | Estimated screen Y coordinate |
+| `elapsed_s` | Float seconds since first frame (4 decimal places; sub-second precision) |
+| `x` | Estimated screen X coordinate (Kalman-smoothed) |
+| `y` | Estimated screen Y coordinate (Kalman-smoothed) |
+| `is_padding` | `1` if this row is a synthetic fill frame, `0` for real data |
 
-Blink or no-face frames produce no row.
+Raw `(x, y)` predictions from the gaze estimator are passed through a `cv2.KalmanFilter` before being written, reducing per-frame noise.
+
+Blink or no-face frames are written as padding rows (`is_padding=1`, `x=None, y=None`) rather than skipped, so `frame_id` stays aligned with the video frame index.
+
+## Mouse tracking
+
+Each recording session also produces `recordings/mouse/<email>_mouse.csv` with the same column layout as the gaze CSV (`video_id`, `frame_id`, `minute`, `second`, `elapsed_s`, `x`, `y`, `is_padding`). Cursor position is sampled once per webcam frame. On Windows the position is read via `ctypes.windll.user32.GetCursorPos` (zero overhead, no extra dependencies); on other platforms it falls back to `pyautogui.position()`.
 
 ## Build a standalone .exe (Windows)
 
@@ -168,6 +177,7 @@ zemo/
     ├── screen/          # Screen MP4s
     ├── audio/           # System audio .mka (PyAV) or .wav (fallback)
     ├── gaze/            # Gaze CSVs (<email>_gaze.csv)
+    ├── mouse/           # Mouse CSVs (<email>_mouse.csv)
     └── screen_with_audio/  # Muxed screen + audio MP4s
 ```
 
@@ -191,6 +201,7 @@ Play a video in the browser while it runs; the WAV should contain that audio. Li
 
 - **Countdown length:** edit `COUNTDOWN_SECONDS` in `recorder/config.py`.
 - **Gaze model path:** edit `GAZE_ESTIMATOR_PATH` in `recorder/config.py` (default: `gaze_model.pkl` next to the app).
+- **FPS:** `DEFAULT_FPS` in `recorder/config.py` (default: 15). The value loaded from QSettings (Settings dialog) at startup overrides this; `DEFAULT_FPS` is only the baseline for a fresh install.
 - **Webcam capture size:** `WEBCAM_PREFERRED_WIDTH` / `WEBCAM_PREFERRED_HEIGHT` in `recorder/config.py` default to `None` (native camera resolution). Set both to a supported pair (e.g. `1280` and `720`) if you want a fixed mode; avoid matching full monitor dimensions unless your camera truly supports that mode, or you may see letterboxing.
 - **Recordings location:** by default `recordings/` is created next to the script / exe, with `webcam/`, `screen/`, `audio/`, and `gaze/` subfolders. `.gitkeep` files are created so these folders can be tracked in Git even when empty.
 

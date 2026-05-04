@@ -17,7 +17,6 @@ RECORDINGS_DIR = PROJECT_ROOT / RECORDINGS_DIR_NAME
 WEBCAM_SUBDIR = "webcam"
 SCREEN_SUBDIR = "screen"
 AUDIO_SUBDIR = "audio"
-DETECTION_SUBDIR = "detection"
 GAZE_SUBDIR = "gaze"
 MOUSE_SUBDIR = "mouse"
 
@@ -46,11 +45,6 @@ def get_screen_dir() -> Path:
 def get_audio_dir() -> Path:
     """Directory for audio recordings (system/loopback)."""
     return RECORDINGS_DIR / AUDIO_SUBDIR
-
-
-def get_detection_dir() -> Path:
-    """Directory for emotion detection results (CSV per recording)."""
-    return RECORDINGS_DIR / DETECTION_SUBDIR
 
 
 def get_test_recordings_dir() -> Path:
@@ -101,15 +95,6 @@ GREEN = "#3ddc84"
 MUTED = "#555555"
 FG = "#e0e0e0"
 FG2 = "#888888"
-MONO = ("Courier New", 10)
-MONO_SM = ("Courier New", 9)
-
-
-def sans_font():
-    import tkinter as tk
-
-    return ("Segoe UI", 10) if getattr(tk, "TkVersion", None) else ("Helvetica", 10)
-
 
 # ─── Recording ────────────────────────────────────────────────────────────────
 PREVIEW_W = 400
@@ -139,10 +124,11 @@ WEBCAM_FLIP_HORIZONTAL = "auto"
 # Requested capture resolution after opening the camera. The driver picks the closest supported mode
 # (e.g. 1280×720 if 1080p is unavailable). None = leave default (native mode; avoids letterboxing
 # from forcing monitor-sized capture when the sensor aspect differs).
+
 WEBCAM_PREFERRED_WIDTH = None
 WEBCAM_PREFERRED_HEIGHT = None
-# Use mp4v first (no extra DLLs). H.264 needs OpenH264 on Windows and often fails.
-VIDEO_FOURCC_TRY_ORDER = ("mp4v",)
+# Use mp4v first (no extra DLLs); avc1 (H.264) gives 3–5x smaller files when available.
+VIDEO_FOURCC_TRY_ORDER = ("mp4v", "avc1")
 COUNTDOWN_SECONDS = 5
 # Max screen frames to write per loop when catching up (avoids death spiral; more = smoother but heavier)
 SCREEN_CATCHUP_FRAMES = 20
