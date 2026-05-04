@@ -33,13 +33,11 @@ def _dxcam_module():
         return None
     try:
         import dxcam_cpp as dxcam
-
         _dxcam = dxcam
         return _dxcam
     except ImportError:
         try:
             import dxcam
-
             _dxcam = dxcam
             return _dxcam
         except ImportError:
@@ -63,7 +61,7 @@ class ScreenRecorderCore:
         self._on_frame_written = None
 
     def set_on_frame_written(self, callback):
-        """Register ``callback(frame, elapsed, is_padding)`` after each encoded screen frame (or None)."""
+        """Register ``callback(frame, elapsed, is_padding)`` after each encoded frame."""
         self._on_frame_written = callback
 
     def start_preview(self):
@@ -79,10 +77,7 @@ class ScreenRecorderCore:
         save_path.mkdir(parents=True, exist_ok=True)
         (save_path / ".gitkeep").touch(exist_ok=True)
         base = email_filename_part(email) if email else "user"
-        candidate = unique_name_with_suffix(
-            save_path, base, f"_screen{config.VIDEO_EXT}"
-        )
-        self.filename = str(candidate)
+        self.filename = str(unique_name_with_suffix(save_path, base, f"_screen{config.VIDEO_EXT}"))
         self.recording = True
         self._pending_recording = (str(save_dir), start_barrier, email)
 
@@ -95,10 +90,7 @@ class ScreenRecorderCore:
         save_path.mkdir(parents=True, exist_ok=True)
         (save_path / ".gitkeep").touch(exist_ok=True)
         base = email_filename_part(email) if email else "user"
-        candidate = unique_name_with_suffix(
-            save_path, base, f"_screen{config.VIDEO_EXT}"
-        )
-        self.filename = str(candidate)
+        self.filename = str(unique_name_with_suffix(save_path, base, f"_screen{config.VIDEO_EXT}"))
         self._thread = threading.Thread(
             target=self._run, args=(False, save_dir, start_barrier, email), daemon=True
         )
@@ -113,282 +105,171 @@ class ScreenRecorderCore:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
 
+    # ── capture backend helpers ────────────────────────────────────────────────
+
+    def _make_dxcam_capture(self):
+        """Return (grab, w, h, cleanup) for dxcam, or None if no frame arrives."""
+        dxcam = _dxcam_module()
+        camera = dxcam.create(output_color="BGR", output_idx=max(0, config.MONITOR_INDEX - 1))
+        camera.start(target_fps=int(config.FPS))
+        frame = None
+        for _ in range(100):
+            if self._stop.is_set():
+                break
+            frame = camera.get_latest_frame()
+            if frame is not None:
+                break
+            time.sleep(0.02)
+        if frame is None:
+            try:
+                camera.stop()
+            except Exception:
+                pass
+            return None
+        nat_h, nat_w = frame.shape[:2]
+        if config.RECORDING_WIDTH and config.RECORDING_HEIGHT:
+            w, h = make_even(config.RECORDING_WIDTH), make_even(config.RECORDING_HEIGHT)
+        else:
+            w, h = make_even(nat_w), make_even(nat_h)
+
+        def cleanup():
+            try:
+                camera.stop()
+            except Exception:
+                pass
+
+        return camera.get_latest_frame, w, h, cleanup
+
+    def _make_mss_capture(self):
+        """Return (grab, w, h, cleanup) for mss."""
+        import mss
+        sct = mss.mss()
+        monitor = sct.monitors[config.MONITOR_INDEX]
+        # Use actual grab dimensions (not monitor dict) so DPI scaling doesn't cause mismatch.
+        probe = cv2.cvtColor(np.array(sct.grab(monitor)), cv2.COLOR_BGRA2BGR)
+        nat_h, nat_w = probe.shape[:2]
+        if config.RECORDING_WIDTH and config.RECORDING_HEIGHT:
+            w, h = make_even(config.RECORDING_WIDTH), make_even(config.RECORDING_HEIGHT)
+        else:
+            w, h = make_even(nat_w), make_even(nat_h)
+
+        def grab():
+            try:
+                return cv2.cvtColor(np.array(sct.grab(monitor)), cv2.COLOR_BGRA2BGR)
+            except Exception:
+                return None
+
+        return grab, w, h, sct.close
+
+    def _open_writer(self, w: int, h: int, label: str = ""):
+        for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
+            out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
+            if ok:
+                suffix = f" ({label})" if label else ""
+                self.on_status("recording", f"→ {Path(self.filename).name}{suffix}")
+                return out
+            if out:
+                out.release()
+        self.on_status("error", "Failed to create MP4 writer")
+        self.recording = False
+        return None
+
+    # ── main thread ────────────────────────────────────────────────────────────
+
     def _run(self, preview_only, save_dir=None, start_barrier=None, email=None):
         self._start_barrier = start_barrier
-        if _dxcam_module() is not None:
-            self._run_dxcam(preview_only, save_dir)
-        else:
-            self._run_mss(preview_only, save_dir)
 
-    def _run_dxcam(self, preview_only, save_dir):
-        dxcam = _dxcam_module()
-        camera = None
+        # Pick backend; fall back from dxcam to mss if no initial frame arrives.
+        capture_ctx = label = None
+        if _dxcam_module() is not None:
+            capture_ctx = self._make_dxcam_capture()
+            if capture_ctx is None and not self._stop.is_set():
+                self.on_status("error", "dxcam: no frame (fallback to mss)")
+            else:
+                label = "dxcam"
+        if capture_ctx is None and not self._stop.is_set():
+            capture_ctx = self._make_mss_capture()
+        if capture_ctx is None or self._stop.is_set():
+            return
+
+        grab, w, h, cleanup = capture_ctx
         out = None
         t0 = time.time()
-        last_bgr = None
-        w = h = 0
         frame_count = 0
+        last_bgr = None
         frame_interval = 1.0 / config.FPS
         next_write_time = t0
+
         try:
-            output_idx = max(0, config.MONITOR_INDEX - 1)
-            camera = dxcam.create(output_color="BGR", output_idx=output_idx)
-            camera.start(target_fps=int(config.FPS))
-            for _ in range(100):
-                if self._stop.is_set():
-                    return
-                frame = camera.get_latest_frame()
-                if frame is not None:
-                    nat_h, nat_w = frame.shape[:2]
-                    if (
-                        config.RECORDING_WIDTH is not None
-                        and config.RECORDING_HEIGHT is not None
-                    ):
-                        w, h = make_even(config.RECORDING_WIDTH), make_even(
-                            config.RECORDING_HEIGHT
-                        )
-                    else:
-                        w, h = make_even(nat_w), make_even(nat_h)
-                    if (frame.shape[1], frame.shape[0]) != (w, h):
-                        frame = cv2.resize(frame, (w, h))
-                    last_bgr = frame.copy()
-                    break
-                time.sleep(0.02)
-            if last_bgr is None:
-                self.on_status("error", "dxcam: no frame (fallback to mss)")
-                self._run_mss(preview_only, save_dir)
-                return
             if not preview_only and save_dir:
-                for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                    out, ok = create_writer(
-                        self.filename, fourcc_str, config.FPS, w, h
-                    )
-                    if ok:
-                        break
-                    if out:
-                        out.release()
-                        out = None
-                if not out or not out.isOpened():
-                    self.on_status("error", "Failed to create MP4 writer")
-                    self.recording = False
+                out = self._open_writer(w, h, label or "")
+                if out is None:
                     return
-                self.on_status("recording", f"→ {Path(self.filename).name} (dxcam)")
-                if self._start_barrier is not None:
-                    self._start_barrier.wait()
+                if start_barrier is not None:
+                    start_barrier.wait()
                 t0 = time.time()
                 next_write_time = t0
+
             while not self._stop.is_set():
+                # Transition: preview → recording
                 if preview_only and self._pending_recording is not None:
-                    save_dir_p, barrier, _ = self._pending_recording
+                    _, barrier, _ = self._pending_recording
                     self._pending_recording = None
-                    for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                        out, ok = create_writer(
-                            self.filename, fourcc_str, config.FPS, w, h
-                        )
-                        if ok:
-                            break
-                        if out:
-                            out.release()
-                            out = None
-                    if not out or not out.isOpened():
-                        self.on_status("error", "Failed to create MP4 writer")
-                        self.recording = False
+                    out = self._open_writer(w, h, label or "")
+                    if out is None:
                         break
-                    self.on_status("recording", f"→ {Path(self.filename).name} (dxcam)")
                     if barrier is not None:
                         barrier.wait()
                     t0 = time.time()
                     frame_count = 0
                     next_write_time = t0
                     preview_only = False
+
                 sleep_until = next_write_time - time.time()
                 if sleep_until > 0.002:
                     time.sleep(sleep_until)
                 if self._stop.is_set():
                     break
+
                 t_now = time.time()
-                if next_write_time <= t_now:
-                    frame = camera.get_latest_frame()
-                    if frame is None:
-                        frame = last_bgr
-                    else:
-                        if (frame.shape[1], frame.shape[0]) != (w, h):
-                            frame = cv2.resize(frame, (w, h))
-                        last_bgr = frame
-                    if out is not None:
-                        written = frame
+                frame = grab()
+                if frame is None:
+                    frame = last_bgr
+                else:
+                    if (frame.shape[1], frame.shape[0]) != (w, h):
+                        frame = cv2.resize(frame, (w, h))
+                    last_bgr = frame
+
+                if frame is None:
+                    next_write_time += frame_interval
+                    continue
+
+                if out is not None:
+                    out.write(frame)
+                    frame_count += 1
+                    if self._on_frame_written is not None:
                         try:
-                            out.write(frame)
+                            self._on_frame_written(frame, t_now - t0, False)
                         except Exception:
-                            if last_bgr is not None:
-                                written = last_bgr
-                                out.write(last_bgr)
-                            else:
-                                written = np.zeros((h, w, 3), dtype=np.uint8)
-                                out.write(written)
-                        frame_count += 1
-                        next_write_time += frame_interval
-                        elapsed = time.time() - t0
-                        if self._on_frame_written is not None:
-                            try:
-                                self._on_frame_written(written, elapsed, False)
-                            except Exception:
-                                pass
-                    else:
-                        next_write_time = t_now + frame_interval
-                    preview = resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H)
-                    self.on_frame(preview, time.time() - t0)
+                            pass
+
+                next_write_time += frame_interval
+                self.on_frame(resize_frame(frame, config.PREVIEW_W, config.PREVIEW_H), t_now - t0)
+
         finally:
-            t_final = getattr(self, "_stop_time", None) or time.time()
+            cleanup()
             if out is not None:
+                t_final = getattr(self, "_stop_time", None) or time.time()
                 elapsed = t_final - t0
-                expected_frames = int(elapsed * config.FPS)
-                frames_missing = expected_frames - frame_count
+                frames_missing = int(elapsed * config.FPS) - frame_count
                 if last_bgr is not None and frames_missing > 0:
-                    pad_elapsed = t_final - t0
                     for _ in range(frames_missing):
                         out.write(last_bgr)
                         if self._on_frame_written is not None:
                             try:
-                                self._on_frame_written(last_bgr, pad_elapsed, True)
+                                self._on_frame_written(last_bgr, elapsed, True)
                             except Exception:
                                 pass
                 out.release()
-            if camera is not None:
-                try:
-                    camera.stop()
-                except Exception:
-                    pass
-            self.recording = False
-            if out is not None:
                 self.on_done(self.filename)
-
-    def _run_mss(self, preview_only, save_dir):
-        import mss
-
-        with mss.mss() as sct:
-            monitor = sct.monitors[config.MONITOR_INDEX]
-            if (
-                config.RECORDING_WIDTH is not None
-                and config.RECORDING_HEIGHT is not None
-            ):
-                w = make_even(config.RECORDING_WIDTH)
-                h = make_even(config.RECORDING_HEIGHT)
-            else:
-                w = make_even(monitor["width"])
-                h = make_even(monitor["height"])
-            out = None
-            if not preview_only and save_dir:
-                for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                    out, ok = create_writer(self.filename, fourcc_str, config.FPS, w, h)
-                    if ok:
-                        break
-                    if out:
-                        out.release()
-                        out = None
-                if not out or not out.isOpened():
-                    self.on_status("error", "Failed to create MP4 writer")
-                    self.recording = False
-                    return
-                self.on_status("recording", f"→ {Path(self.filename).name}")
-                if self._start_barrier is not None:
-                    self._start_barrier.wait()
-            t0 = time.time()
-            frame_count = 0
-            last_bgr = None
-            frame_interval = 1.0 / config.FPS
-            next_write_time = t0
-            try:
-                while not self._stop.is_set():
-                    if preview_only and self._pending_recording is not None:
-                        save_dir_p, barrier, _ = self._pending_recording
-                        self._pending_recording = None
-                        for fourcc_str in config.VIDEO_FOURCC_TRY_ORDER:
-                            out, ok = create_writer(
-                                self.filename, fourcc_str, config.FPS, w, h
-                            )
-                            if ok:
-                                break
-                            if out:
-                                out.release()
-                                out = None
-                        if not out or not out.isOpened():
-                            self.on_status("error", "Failed to create MP4 writer")
-                            self.recording = False
-                            break
-                        self.on_status("recording", f"→ {Path(self.filename).name}")
-                        if barrier is not None:
-                            barrier.wait()
-                        t0 = time.time()
-                        frame_count = 0
-                        next_write_time = t0
-                        preview_only = False
-                    sleep_until = next_write_time - time.time()
-                    if sleep_until > 0.002:
-                        time.sleep(sleep_until)
-                    if self._stop.is_set():
-                        break
-                    t_now = time.time()
-                    if next_write_time <= t_now:
-                        try:
-                            img = sct.grab(monitor)
-                            frame = cv2.cvtColor(np.array(img), cv2.COLOR_BGRA2BGR)
-                            if (frame.shape[1], frame.shape[0]) != (w, h):
-                                frame = cv2.resize(frame, (w, h))
-                            last_bgr = frame
-                            if out is not None:
-                                out.write(frame)
-                                frame_count += 1
-                                next_write_time += frame_interval
-                                elapsed = time.time() - t0
-                                if self._on_frame_written is not None:
-                                    try:
-                                        self._on_frame_written(frame, elapsed, False)
-                                    except Exception:
-                                        pass
-                            else:
-                                next_write_time = t_now + frame_interval
-                            preview = resize_frame(
-                                frame, config.PREVIEW_W, config.PREVIEW_H
-                            )
-                            self.on_frame(preview, time.time() - t0)
-                        except Exception:
-                            if out is not None:
-                                if last_bgr is not None:
-                                    written = last_bgr
-                                    out.write(last_bgr)
-                                else:
-                                    black = np.zeros((h, w, 3), dtype=np.uint8)
-                                    written = black
-                                    out.write(black)
-                                    last_bgr = black
-                                frame_count += 1
-                                next_write_time += frame_interval
-                                elapsed = time.time() - t0
-                                if self._on_frame_written is not None:
-                                    try:
-                                        self._on_frame_written(written, elapsed, False)
-                                    except Exception:
-                                        pass
-                            else:
-                                next_write_time = t_now + frame_interval
-            finally:
-                t_final = getattr(self, "_stop_time", None) or time.time()
-                if out is not None:
-                    elapsed = t_final - t0
-                    expected_frames = int(elapsed * config.FPS)
-                    frames_missing = expected_frames - frame_count
-                    if last_bgr is not None and frames_missing > 0:
-                        pad_elapsed = t_final - t0
-                        for _ in range(frames_missing):
-                            out.write(last_bgr)
-                            if self._on_frame_written is not None:
-                                try:
-                                    self._on_frame_written(last_bgr, pad_elapsed, True)
-                                except Exception:
-                                    pass
-                    out.release()
-                self.recording = False
-                if out is not None:
-                    self.on_done(self.filename)
-
+            self.recording = False
