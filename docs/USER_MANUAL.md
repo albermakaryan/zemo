@@ -118,8 +118,9 @@ You can change the **save location** using the **📁** button in the main windo
 
 ### 5.5 Gaze and settings (optional)
 
-- Open **⚙** in the top bar to show the **Gaze** strip: **Enable** toggles gaze for the next recording, **Calibrate eyes** (or **Re-calibrate**) runs full-screen calibration in a subprocess (the webcam preview is released first). The saved model is `gaze_model.pkl` next to the app.
+- Open **⚙** in the top bar to show the **Gaze** strip: **Enable** toggles gaze for the next recording, **Calibrate Eyes** (or **Re-calibrate Eyes**) runs full-screen calibration in a subprocess (the webcam preview is released first). The saved model is `gaze_model.pkl` next to the app.
 - Gaze is **on by default** in the UI; you can still start recording if no model is present, using the **continue without gaze** option when prompted.
+- **First calibration on a new machine:** if the MediaPipe face landmark model (`face_landmarker.task`, ~26 MB) has not been downloaded yet, clicking **Calibrate Eyes** automatically shows a **"First-time Setup"** progress dialog and downloads it before opening the calibration window. An internet connection is required for this one-time download; subsequent calibrations (and recordings) use the cached copy and work offline.
 
 ### 5.6 Main window (when not minimized)
 
@@ -165,6 +166,8 @@ Save location can always be changed from the app with the 📁 button.
 | No system audio | System/loopback audio is Windows-only and may require correct playback device; see `recorder/audio/README.md` for details. |
 | Recordings in wrong place | Use the 📁 button in the main window to set the base folder for `webcam/`, `screen/`, and `audio/`. |
 | App does not exit cleanly | Use the window X button or Ctrl+C once; the app will stop recorders and exit. |
+| Calibrate Eyes shows a download dialog on a new PC | Expected on first use — the face landmark model (~26 MB) is downloaded once to `~/.cache/eyetrax/mediapipe/`. Requires internet. Subsequent calibrations work offline. |
+| Calibrate Eyes does nothing / app freezes after download | Rebuild the exe with the current `Recorder.spec` (adds `unicodedata` to the bundle). Run `build_exe.bat` or `build_exe.bat --test`. |
 | Gaze calibration fails in the built `.exe` | Ensure you built with the current `Recorder.spec` (includes the eyetrax runtime hook). Rebuild with `build_exe.bat` or `build_exe.bat --test`. |
 | UI freezes on “1” in the countdown | Should not occur in current versions: gaze loading runs off the main thread. Update to the latest `main` and rebuild. |
 

@@ -1,10 +1,21 @@
 """Eye tracking via eyetrax: calibration, model persistence, per-frame gaze estimation."""
 
 import os
+from pathlib import Path
+import urllib.request
 
 from eyetrax import GazeEstimator, run_lissajous_calibration
 
 from recorder import config
+
+
+FACE_LANDMARKER_TASK_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+)
+FACE_LANDMARKER_TASK_PATH = (
+    Path.home() / ".cache" / "eyetrax" / "mediapipe" / "face_landmarker.task"
+)
 
 
 class EyeTracker:
@@ -51,6 +62,42 @@ class EyeTracker:
         """Return True if a calibration model file exists on disk."""
         path = model_path or str(config.GAZE_ESTIMATOR_PATH)
         return os.path.exists(path)
+
+    @staticmethod
+    def is_face_landmarker_available() -> bool:
+        """Return True if the MediaPipe face landmark model is already cached."""
+        return FACE_LANDMARKER_TASK_PATH.exists()
+
+    @staticmethod
+    def download_face_landmarker(progress_callback=None) -> None:
+        """Download face_landmarker.task to the eyetrax cache directory.
+
+        progress_callback(bytes_done: int, total_bytes: int | None) is called after each chunk.
+        Raises on network or filesystem errors.
+        """
+        dst = FACE_LANDMARKER_TASK_PATH
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_suffix(dst.suffix + ".tmp")
+        try:
+            req = urllib.request.Request(
+                FACE_LANDMARKER_TASK_URL, headers={"User-Agent": "eyetrax"}
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp, tmp.open("wb") as fh:
+                raw_total = resp.headers.get("Content-Length")
+                total = int(raw_total) if raw_total and raw_total.isdigit() else None
+                downloaded = 0
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback is not None:
+                        progress_callback(downloaded, total)
+            tmp.replace(dst)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def track_eyes(self, frame) -> tuple[float | None, float | None]:
         """Return (x, y) screen coordinates estimated from a webcam frame.

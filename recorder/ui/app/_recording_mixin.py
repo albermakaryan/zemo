@@ -44,6 +44,13 @@ class GazeInitBridge(QtCore.QObject):
     ready = QtCore.Signal(object, object)  # EyeTracker|None, Exception|None
 
 
+class FaceLandmarkerDownloadBridge(QtCore.QObject):
+    """Thread-safe signals for face_landmarker.task download progress."""
+
+    progress = QtCore.Signal(int, int)  # bytes_done, total_bytes (-1 if unknown)
+    done = QtCore.Signal(bool, str)     # success, error_message
+
+
 class RecordingMixin:
     """Mixin that owns all recording-action logic for the App window."""
 
@@ -572,7 +579,7 @@ class RecordingMixin:
             old_recorder.stop()
             webcam_panel.recorder = None
 
-        def _calibrate():
+        def _run_calibrate():
             # Wait for the old capture to be fully released before calibration opens it.
             if old_recorder is not None:
                 old_recorder.join(timeout=2.0)
@@ -597,7 +604,65 @@ class RecordingMixin:
             # Emit a Qt signal (thread-safe) to notify the main thread.
             self._calibration_finished.emit()
 
-        threading.Thread(target=_calibrate, daemon=True).start()
+        if EyeTracker.is_face_landmarker_available():
+            threading.Thread(target=_run_calibrate, daemon=True).start()
+            return
+
+        # face_landmarker.task is missing — download it first with a progress dialog.
+        # Keep the bridge on self so Python's GC cannot collect it before the download
+        # thread calls bridge.done.emit(); a collected bridge would silently disconnect
+        # the slot and leave the modal dialog open forever.
+        self._btn_calibrate.setText("Downloading model…")
+        self._dl_bridge = FaceLandmarkerDownloadBridge()
+        bridge = self._dl_bridge
+
+        dlg = QtWidgets.QProgressDialog(
+            "Downloading face landmark model (~26 MB)…", None, 0, 100, self
+        )
+        dlg.setWindowTitle("First-time Setup")
+        dlg.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+        dlg.setMinimumDuration(0)
+        dlg.setCancelButton(None)
+        dlg.setValue(0)
+
+        def _on_progress(done_bytes, total_bytes):
+            if total_bytes and total_bytes > 0:
+                dlg.setMaximum(100)
+                dlg.setValue(int(100 * done_bytes / total_bytes))
+            else:
+                dlg.setMaximum(0)  # indeterminate spinner
+
+        def _on_done(success, error_msg):
+            self._dl_bridge = None  # release; download is finished
+            dlg.close()
+            if not success:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "Download Failed",
+                    f"Could not download the face landmark model:\n\n{error_msg}\n\n"
+                    "Check your internet connection and try again.",
+                )
+                self._btn_calibrate.setEnabled(True)
+                self._btn_calibrate.setText("Calibrate Eyes")
+                if float_win is not None:
+                    float_win.show()
+                return
+            self._btn_calibrate.setText("Calibrating…")
+            threading.Thread(target=_run_calibrate, daemon=True).start()
+
+        bridge.progress.connect(_on_progress)
+        bridge.done.connect(_on_done)
+
+        def _download():
+            try:
+                EyeTracker.download_face_landmarker(
+                    lambda done_bytes, total: bridge.progress.emit(done_bytes, total or -1)
+                )
+                bridge.done.emit(True, "")
+            except Exception as exc:
+                bridge.done.emit(False, str(exc))
+
+        threading.Thread(target=_download, daemon=True).start()
 
     def _on_calibration_done(self):
         """Called on the main thread after calibration finishes."""

@@ -76,6 +76,9 @@ a = Analysis(
         'PIL.Image',
         'PIL.ImageTk',
         'imageio_ffmpeg',
+        # matplotlib → matplotlib._mathtext → unicodedata (stdlib C extension missed
+        # by PyInstaller's static analysis when the import chain goes through mediapipe)
+        'unicodedata',
     ] + _eyetrax_submodules + _mp_hidden,
     hookspath=[],
     hooksconfig={},
